@@ -1,0 +1,93 @@
+.\"
+.\"
+.TH OCTOPID "8" "Septemper 2020"
+.SH NAME
+octopid - VxLAN extender daemon
+
+.SH SYNOPSIS
+.B octopid
+[options...]
+
+.SH DESCRIPTION
+.PP
+This daemon is listening for VxLAN multicast packets and relays them to
+peer daemons in different networks according to a given rule\&.
+The relayed packets are broadcast to that network\&.
+.PP
+See the documentation
+.B octopi(1)
+for how to define the rules\&.
+.PP
+.SH OPTIONS
+.TP
+.B \-h
+show help and exit\&.
+.TP
+.B \-v
+show version and exit\&.
+.TP
+.B \-c " path"
+specify config file path\&. (default: /opt/octopi/etc/octopi.conf)
+.TP
+.B \-D " path"
+specify  rule database path\&. (default: /var/octopi/octopidb)
+.TP
+.B \-Q " path"
+specify rule sync queue path\&. (default: /var/octopi/octopiqueue)
+.TP
+.B \-S " number"
+specify maximum number of parallel synchronization\&. (default: 8)
+.TP
+.B \-d
+debug mode\&.
+.TP
+.B \-n
+dry run mode\&.
+.TP
+.B \-q
+quiet mode.
+.TP
+.B \-f
+foreground mode\&. (Do not start as daemon)\&.
+.TP
+.B \-s
+syslog suppression (for testing purpose)\&.
+
+.SH SIGNALS
+.TP
+.B INT 
+stop daemon\&.
+.TP
+.B TERM 
+stop daemon\&.
+.TP
+.B HUP
+restart child processes (not reloading config file)\&.
+.TP
+.B USR1 
+start debug logging\&.
+.TP
+.B USR2 
+stop debug logging\&.
+
+.SH FILES
+.PP
+.B /opt/octopi/etc/octopi.conf
+configuration file\&. See octopi.conf(8)\&.
+.PP
+.B /var/octopi/octopidb
+octopi rule database\&. See octopi(1)\&.
+.PP
+.B /var/octopi/octopiqueue
+octopi sync queue\&. See octopi(1)\&.
+
+.SH AUTHOR
+HANATAKA Shinya
+
+.SH COPYRIGHT
+Copyright \(co 2019-2020 Internet Initiative Japan Inc\&.
+.br
+Copyright \(co 2019-2020 HANATAKA Shinya\&.
+
+.SH "SEE ALSO"
+octopi(1), octopi.conf(8)

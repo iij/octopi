@@ -1,0 +1,112 @@
+=========================================================================
+        keepalived を使って octopid を冗長化する方法
+=========================================================================
+
+○ octopid を冗長化するために keepalived の VRRP を使う手順
+
+1. sysctl の設定
+
+  - rp_filter=2     keepalived は同じセクメントの VIP で通信するため (重要)
+  - arp_filter=0    keepalived は同じセクメントの VIP で通信するため (重要)
+  - arp_ignore=1    keepalived が勝手に書き換える
+  - arp_notify=0    keepalived が勝手に GARP するので不要
+  - arp_announce=2  常に適切なアドレスを使用
+  - arp_accept=0    必要ない
+
+  # vi /etc/sysctl.conf
+	net.ipv4.conf.default.rp_filter = 2
+	net.ipv4.conf.default.arp_filter = 0
+	net.ipv4.conf.default.arp_ignore = 1
+	net.ipv4.conf.default.arp_notify = 0
+	net.ipv4.conf.default.arp_announce = 2
+	net.ipv4.conf.default.arp_accept = 0
+
+	net.ipv4.conf.all.rp_filter = 0
+	net.ipv4.conf.all.arp_filter = 0
+	net.ipv4.conf.all.arp_ignore = 0
+	net.ipv4.conf.all.arp_notify = 0
+	net.ipv4.conf.all.arp_announce = 0
+	net.ipv4.conf.all.arp_accept = 0
+  # sysctl -p
+
+
+2. virtual IP を loopback につける
+
+  # ip address add dev lo 192.168.10.11/32 scope host
+
+
+3. keepalived.conf の記述
+
+  - VRRP の設定のみを行なう。LVS の設定は不要
+  - use_vmac を指定して macvlan を使用するよう指定
+  - master になったら unpause を、それ以外は pause を実行するよう設定
+
+  # vi /etc/keerpalived/keepalived.conf
+	global_defs {
+		vrrp_version 3
+		script_user daemon daemon
+		enable_script_security
+		vrrp_garp_master_repeat 1
+		vrrp_garp_lower_prio_repeat 1
+		vrrp_garp_interval 0.05
+		vrrp_gna_interval 0.05
+	}
+
+	vrrp_instance OCTOPI {
+		state BACKUP
+		priority 200
+		# priority 100
+
+		interface eth0
+		virtual_router_id 50
+		use_vmac octopi-vrrp-50
+		nopreempt
+		advert_int 1
+		virtual_ipaddress {
+			192.168.10.11/24
+		}
+		notify_backup "/opt/octopi/bin/octopi pause"
+		notify_master "/opt/octopi/bin/octopi unpause"
+		notify_fault  "/opt/octopi/bin/octopi pause"
+		notify_stop   "/opt/octopi/bin/octopi pause"
+	}
+
+
+3. 起動
+
+  # /usr//sbin/keepalived -P
+
+  - ここで -P オプションは VRRP のみを使用する宣言
+
+
+=================================================================
+○ 自動起動 (systemd)
+
+- systemd を使用して自動起動する場合のサンプル
+
+  # vi /etc/systemd/system/keepalived.service
+	[Unit]
+	Description=Keepalive Daemon (LVS and VRRP)
+	After=syslog.target network-online.target
+	Wants=network-online.target
+	ConditionFileNotEmpty=/etc/keepalived/keepalived.conf
+
+	[Service]
+	Type=forking
+	KillMode=process
+	# Read configuration variable file if it is present
+	EnvironmentFile=-/etc/default/keepalived
+	ExecStart=/usr/sbin/keepalived $DAEMON_ARGS
+	ExecReload=/bin/kill -HUP $MAINPID
+
+	[Install]
+	WantedBy=multi-user.target
+
+  # vi /etc/default/keepalived
+	DAEMON_ARGS="-P"
+
+  # systemctl daemon-reload
+  # systemctl enable keepalived
+  (# systemctl start keepalived)
+
+=================================================================

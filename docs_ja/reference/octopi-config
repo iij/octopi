@@ -1,0 +1,148 @@
+
+== ファイル名
+
+  - デフォルトは /opt/octopi/etc/octopi.conf
+  - 起動時に -c オプションで指定できる
+
+
+== 基本設定
+
+  user			[user]		default: daemon
+  - デーモンのユーザ。ユーザ名もしくは UID で指定する。
+
+  group			[group]		default: daemon
+  - デーモンのグループ。グループ名もしくが GID で指定する。
+
+  pid_file		[path]		default: [none]
+  - pid file の場所を絶対パスで指定する。
+  ー 未指定だと pid file を作成しない。
+
+  log_facility		[string]	default: local0
+  - ログ出力先の syslog ファシリティを指定する。
+
+  log_interval		[秒]             default: 300 (0-86400)
+  - 統計ログの出力間隔を指定する。
+  - 0 を指定すると統計ログを出力しない。
+  - タイミングは地域時間の起点から計算する
+
+
+== ネットワーク設定
+
+  interface		[string]	default: eth0
+  - VxLAN を話すインターフェイスを指定する
+
+  address		[address]	default: address of interface
+  - デーモンがパケット中継する際に使用する送信元アドレスを指定する。
+  - 指定しなかった場合は interface のアドレスが使用される。
+
+  multicast		[address]	default: 239.0,0.0/8
+  - VxLAN が使用するマルチキャスト範囲を指定する。複数指定可
+  - 230.0.0.0/8 はプライベート領域全部
+
+  vxlan_port		[number]	default: 4789
+  - VxLAN のポート番号を指定する。
+  - 省略した場合は IANA 標準の 4789 が使用される
+
+  relay_port		[num]		default: 14789
+  - デーモンがパケット中継する際に使用するポート番号を指定する
+
+  timeout		[ミリ秒]	default: 0 (無効)
+  - パケットの許容遅延をミリ秒で指定する。
+  - 指定した時間より遅延したパケットは破棄される。時計合わせ重要。
+  - 0 そ指定した場合は遅延のチェックを行なわない。
+
+  caster_ttl		[number]	default: 1
+  - 中継されたマルチキャスト・パケットに設定する TTL。
+  - 通常は 1 のままで問題ない。
+
+  secret		[string]	default: ""
+  - 中継時に MD5 サインを行なう際の共有シークレット。
+  - 省略した場合には MD5 サインおよび MD5 チェックを行なわない。
+
+
+== プロセス数の設定
+
+  snipper_procs		[number]	default: 1 (0-1)
+  - パケットを読み出す octopi_snipper デーモンのプロセス数を指定する
+  - 1 固定
+
+  dispatcher_procs	[number]	default: 8 (0-100)
+  - パケットを中継する octopi_dispatcher デーモンのプロセス数を指定する。
+  - CPU の core 数程度を指定することを推奨。
+
+  caster_procs		[numbe]		default: 4 (0-100)
+  - パケットを送信する octopi_caster デーモンのプロセス数を指定する。
+  - CPU の core 数の半分程度を指定することを推奨する。
+
+  logger_procs		[number]	default: 1 (0-1)
+  - 統計ログを出力する octopi_logger デーモンのプロセス数を指定する。
+  - 0 または 1 を指定する。0 を指定する統計ログを出力しない。
+
+  listner_procs		[number]	default: 0 (0-100)
+  - ルール同期を待ち受けする octopi_listener デーモンのプロセス数を指定する。
+  - ルール同期の子供側ならば 2 程度を指定することを推奨
+
+  kicker_procs		[number]	default: 0 (0-1)
+  - 定期的にルール同期する octopi_kicker デーモンのプロセス数を指定する。
+  - ルール同期の親側なら 1 を指定する。
+
+  talker_procs		[number]	default: 8 (0-100)
+  - ルール同期を実行する octopi_talker プロセスの最大数を指定する。
+  - 複数の宛先に同時にルール同期する際の平行数の上限となる。
+  - ルールの同期先が多い場合には、メモリに余裕があれば大きい値にすると良い。
+
+
+== ルールファイル設定
+
+  rule_file		[path]		default: /var/octopi/octopidb
+  - ルール・データベースの場所を指定する。
+
+  pool_size		[number]	default: 1000000 (1000-16777216)
+  - ルールファイルの大きさを指定する。
+  - 作成時にプールサイズ指定が省略された時にこの値を使用する。
+  - 使用を想定するルール数の 10 倍以上を指定することを推奨。
+
+  hash_size		[number]	default: 231313 (1000-16777216)
+  - ルールファイルの VNI ハッシュの大きさを指定する。
+  - 作成時にハッシュサイズ指定が省略された時にこの値を使用する。
+  - 使用を想定するネットワーク数 2 倍以上の素数を指定することを推奨。
+
+
+== キューファイルの設定
+
+  queue_file		[path]		default: /var/octopi/octopiqueue
+  - 同期キューの場所を指定する。
+
+  queue_pool_size	[number]	default: 100000 (1000-16777216)
+  - 同期キューの大きさを指定する。
+  - 作成時にプールサイズ指定が省略された時にこの値を使用する。
+  - 使用するネットワーク数の数値程度を推奨。
+
+  hash_size		[number]	default: 23131   (1000-16777216)
+  - 同期キューの宛先アドレス・ハッシュの大きさを指定する。
+  - 作成時にハッシュサイズ指定が省略された時にこの値を使用する。
+  - 同期の宛先の 5 倍以上の素数を指定することを推奨。
+
+
+== 同期設定
+
+  sync_address		[address]	default: ::
+  - ルール同期の待ち受けアドレスを指定する。
+  - 0.0.0.0 を指定するとサーバにつけられた全ての IPv4 になる。
+  - :: を指定するとサーバにつけられた全ての IPv6 になる。
+  - :: を指定した場合には IPv6 mapped IPv4 で IPv4 でも接続可能
+
+  sync_port		[number]	default: 24789
+  - ルール同期に使用するポート番号を指定する
+
+  sync_timeout		[ミリ秒]	default: 60000
+  - ルール同期する際の最大許容遅延時間を指定する。
+  - この時間を超えたら同期を中断し、キューに戻して後に再送信する
+
+  sync_interval		[ミリ秒]	default: 60000
+  - 定期的にルーヅ同期を起動する間隔を指定する。
+  - 0 を指定した場合は自動的なルール同期を起動しない
+
+  sync_buffer		[bytes]		default: 65536
+  - ルール同期用のバッファーの初期サイズを指定する
+  - 必要に応じて拡大されるので特に変更する必要はない

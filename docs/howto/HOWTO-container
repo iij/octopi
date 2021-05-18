@@ -1,0 +1,86 @@
+=========================================================================
+        HowTo run octopi in a Linux network container
+=========================================================================
+
+Note: In the case of containers using docker systems, octopi will
+      work as usual if you set the network to macvlan or similar. 
+      (Don't forget to remove some security filter).
+
+      This article provides instructions on how to use network
+      containers directly without using such a system configuration.
+
+=========================================================================
+
+* Install
+
+ - See doc/howto/MEMO-howto-install for installation.
+
+* Setup
+
+  - It is useful to create the following procedure as a shell script
+    and run it when the server starts.
+
+1. If not exists, create a configuration directory for the
+   container. (sc0 below is a sample container name)
+
+  # mkdir -p /etc/netns/sc0
+
+
+2. If resolv.conf is not in the configuration directory, create it.
+
+  # test -f /etc/netns/sc0/resolv.conf || cp /etc/resolv.conf /etc/netns/sc0
+
+
+3. Create a network container
+
+  # /sbin/ip netns add sc0
+
+
+4. Create a macvlan interface and pass it to the container
+   (eth0 is the physical interface name and tmp_sc0 is a temporary
+    name, 88:00:00:00:00:12 is sample MAC address)
+
+  # /sbin/ip link add link eth0 address 88:00:00:00:00:12 name tmp_sc0
+            type macvlan mode bridge
+  # /sbin/ip link set tmp_sc0 netns sc0
+
+
+5. Configuring the loopback interface
+
+  # /sbin/ip netns exec sc0 /sbin/ip link set lo up
+
+
+6. Configure the macvlan interface
+   (192.168.10.12/24 and fd00:2000:10::12/64 is sample address,)
+
+  # /sbin/ip netns exec sc0 /sbin/ip link set tmp_sc0 name eth0
+  # /sbin/ip netns exec sc0 /sbin/ip link set eth0 mtu 1600 up
+  # /sbin/ip netns exec sc0 /sbin/ip address add dev eth0 192.168.10.12/24
+  # /sbin/ip netns exec sc0 /sbin/ip address add dev eth0 fd00:2000:10::12/64
+  # /sbin/ip netns exec sc0 \
+          /sbin/ip route add dev eth0 default via 192.168.10.1
+
+
+* Start
+
+  - Start octopid in the container
+
+  # /sbin/ip netns exec sc0 /opt/octopi/sbin/octopid
+
+
+=========================================================================
+* HowTo run keepalived in the same container
+
+  - Basically, it's the same as the method described in
+    MEMO-howto-keepalived, change the following.
+
+1. Set the virtual IP to the loopback interface of the container
+
+   /sbin/ip netns exec sc0 \
+           /sbin/ip addrss add dev lo 192.168.10.11/32 scope host
+
+2. Start the daemon in the container
+
+   /sbin/ip netns exec sc0 /usr/sbin/keepalived -P
+
+=========================================================================

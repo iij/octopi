@@ -1,0 +1,150 @@
+-----------------------------------------------------------------------------
+○同期キュー・ファイル構造
+
+ヘッダー               256 bytes   
+  マジック               8 bytes   固定 (4f 43 54 4f 50 49 51 55)
+  メジャー・バージョン   4 bytes   1  
+  マイナー・バージョン   4 bytes   2
+  ノードのサイズ         4 bytes   64
+  ノード番号のサイズ     4 bytes   4
+  ヘッダーのサイズ       4 bytes   256
+  プール数               4 bytes   可変
+  ハッシュ数             4 bytes   可変
+  データ部分のサイズ     4 bytes   
+  ファイル全体のサイズ   4 bytes
+  プール先頭             4 bytes   (node position)
+  プール末尾             4 bytes   (node position)
+  予約                   残り
+
+ノード                  64 byte * プール数
+   type                  1 byte   0:None 1:Relay 2:Backup 3:Member 4:Queue
+   proto                 1 byte   1:IPv4 2:IPv6 3:all
+   mark                  1 byte
+   action;               1 byte   0:なし 1:同期中
+   予約                  4 bytes
+   next                  4 bytes  (node position)
+   link                  4 bytes  (node position)
+   relay                 4 bytes  (node position)
+   member                4 bytes  (node position)
+   queue                 4 bytes  (node position)
+   update                4 bytes  (count)
+   sync                  4 bytes  (count)
+   update_time           8 bytes  (UNIX TIME)
+   addr                 16 bytes IPv4 or IPv6 or VNI
+
+ハッシュ                 4 bytes * ハッシュ数
+   num                   4 bytes  (node position)
+
+-----------------------------------------------------------------------------
+[プール]
+- 未使用のノードの queue
+- 新規は pool_head から取り出し、使用済みは pool_tail に戻す
+
+  pool_head                          pool_tail
+           \                                  \
+            node=node=node=node=node=node=node=node
+
+[ハッシュ]
+
+  (address hash)
+              \
+	       member - member
+              \
+	       relay
+              \
+	       relay - member - member - relay
+              \
+	       member
+	       
+[キュー・ツリー]
+
+  backup
+    |
+    +-- member - queue
+
+  relay
+    |
+    +-- member - queue
+    |
+    +-- member - queue
+    |
+    +-- member
+
+  relay
+    |
+    +-- member - queue - queue - queue
+    |
+    +-- member
+
+-----------------------------------------------------------------------------
+○ 同期対象(member)の選定
+
+  - キューが空でない
+  - sync count が update count より小さい
+  - 現在同期中ではない
+  - 更新時間(update_time)がもっとも古い
+
+-----------------------------------------------------------------------------
+○ 同期手順
+
+== ルールの生成
+  1. 同期キューを開く
+  2. メモリ上にルールをリストアップ
+     - 対象VNI に ALL が含まれている場合は、対象宛ての中継が含まれる全ルール
+     - 対象VNI に ALL が含まれていない場合は、キューにある VNI のルール
+  3. 現在の update count を保存しておく
+  4. action = 1 に設定、いったん同期キューを閉じる
+     - ネットワーク作業中に、他のプロセスが同期キューを使用できるように
+
+== ネットワーク同期
+  5. 対象サーバに TCP で接続
+  6  ルールを送り込む
+     - 対象VNI に ALL が含まれている場合は restore モードを使用
+     - 対象VNI に ALL が含まれていない場合は、update モードを使用
+
+== 同期に成功した場合は
+  7. 再度、同期キューを開く
+  8. 保存してあった update count より古いキューを全て削除する
+  9. sync count を保存してあった update count と同じにする
+ 10. action = 0 にして再度、同期キューを閉じる
+
+== 同期に失敗した場合は
+  7. 再度、同期キューを開く
+  8. action = 0 にして再度、同期キューを閉じる
+
+-----------------------------------------------------------------------------
+○ タイムスタンプ
+
+== RELAY, BACKUP のタイムスタンプ
+  INSERT_TIME (作成時刻)
+    - relay/backup 作成時
+
+  UPDATE_TIME (更新時刻)
+    - relay/backup 作成時
+    - member が追加/削除がされた時
+
+
+== MEMBER のタイムスタンプ
+  INSERT_TIME (キュー作成時刻)
+    - member 作成時
+    - 最初のキューを投入時
+    ※ queue list で表示される時刻
+
+  UPDATE_TIME (キュー更新時刻)
+    - member 作成時
+    - 最初のキューを投入時
+    - 最後のキューが削除され時
+    - SYNC 開始時
+    - SYNC 完了時
+    ※ この時刻が古いものから順に次の更新を開始する
+
+
+== QUEUE のタイムスタンプ
+  INSERT_TIME (個別キュー作成時刻)
+    - 個別 queue 作成時
+
+  UPDATE_TIME (個別キュー追加時刻)
+    - 個別 queue 作成時
+    - 同じ個別 queue が再追加された時
+
+-----------------------------------------------------------------------------

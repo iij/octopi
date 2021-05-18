@@ -1,0 +1,57 @@
+#
+#  octopi.conf
+#
+
+#
+#  base configurations
+#
+user			daemon
+group			daemon
+log_facility		local0
+log_interval		300
+#pid_file		/var/run/octopid.pid
+
+#
+#  network configurations
+#
+interface		eth0
+address			192.168.10.10
+multicast		239.0.0.0/8
+vxlan_port		4789
+relay_port		14789
+caster_ttl		1
+
+#
+#  number of processes
+#
+snipper_procs		1
+dispatcher_procs	8
+caster_procs		4
+logger_procs		1
+#listener_procs		2
+#kicker_procs		1
+#talker_procs		8
+
+#
+#  rule file
+#
+rule_file		/var/octopi/octopidb
+pool_size		1000000
+hash_size		213131
+
+#
+#  queue file
+#
+queue_file		/var/octopi/octopiqueue
+queue_pool_size		100000
+queue_hash_size		21313
+
+#
+#  sync setting
+#
+sync_address		::
+sync_port		24789
+sync_timeout		60000
+sync_interval		60000
+sync_buffer		65536
+

@@ -1,0 +1,170 @@
+.\"
+.\"
+.TH OCTOPI.CONF "5" "Septemper 2020"
+.SH NAME
+octopi.conf - config file for octopi daemon
+
+.SH SYNOPSIS
+.B octopi.conf
+
+.SH DESCRIPTION
+.PP
+This file includes configuration for octopi VxLAN extender\&.
+Its default path is /var/octopi/octopidb\&, and could change
+by -c options flag\&, see octopid(8)\&.
+.PP
+
+.SH BASE CONFIGURATION
+.TP
+.B user
+specify daemon owner\&.
+ (default: daemon)
+.TP
+.B group
+specify daemon group\&.
+(default: daemon)
+.TP
+.B pid_file
+specify pid file path\&. (default: none)
+.TP
+.B log_facility
+specify syslog facility\&.
+(default: local0)
+.TP
+.B log_interval
+specify statistics logging interval by seconds\&. the max is 86400\&.
+if zero, disable statistics logging\&.
+(default: 300)
+
+.SH NETWORK CONFIGURATION
+.TP
+.B interface
+specify network interface for talking VxLAN\&.
+(default: eth0)
+.TP
+.B address
+specify IP address which is used for relaying\&.
+default is primary address of the interface\&.
+.TP
+.B multicast
+specify multicast IP address for listening\&. Multiple can be specified
+(default: 239.0,0.0/8)
+.TP
+.B vxlan_port
+specify UDP port for VxLAN\&. 4789 is IANA standard\&.
+(default: 4789) 
+.TP
+.B relay_port
+specify relay port for octopi daemon\&.
+(default: 14789)
+.TP
+.B secret
+specify shared-sectres for relaing packets\&.
+if ommited, the packets is not signed by secrets and not verified\&.
+.TP
+.B timeout
+specify pakcet delay limits by miliseconds\&. if a packet is older,
+the packet is discard\&. if zero, disable timestamp checking\&.
+(default: 0 which means disabled)
+.TP
+.B caster_ttl
+specify TTL of multi-casting packet\&.
+(default: 1)
+
+.SH PROCESS CONFIGURATION
+.TP
+.B snipper_procs
+number of octopi_snipper process\&. It must be 0 or 1\&.
+.TP
+.B dispatcher_procs
+number of octopi_dispatcher processeses\&.
+We recommend a value equal to the number of CPU cores\&.
+(default: 8)
+.TP
+.B caster_procs
+number of octopi_caster processeses\&.
+(default: 4)
+.TP
+.B logger_procs
+number of octopi_logger processes\&. It must be 0 or 1\&.
+.TP
+.B listener_procs
+number of octopi_listener processes\&.
+(default: 0)
+.TP
+.B kicker_procs
+number of octopi_kicker processes\&.
+(default: 0)
+.TP
+.B talker_procs
+default limit for number of paralel synchronization processes\&.
+(default: 8)
+
+.SH RULE FILE CONFIGURATION
+.TP
+.B rule_file
+specify rule database path\&.
+ (default: /var/octopi/octopidb)
+.TP
+.TP
+.B pool_size
+specify default pool size of database\&.
+(default: 1000000)
+.TP
+.B hash_size
+specify default hash size of database\&.
+(default: 213131)
+
+.SH QUEUE FILE CONFIGURATION
+.TP
+.B queue_file
+specify synchronizaton queue path\&.
+ (default: /var/octopi/octopiqueue)
+.TP
+.B queue_pool_size
+specify default pool size of queue\&.
+(default: 100000)
+.TP
+.B queue_hash_size
+specify default hash size of queue\&.
+(default: 21313)
+
+.SH SYCHRONIZATION CONFIGURATION
+.TP
+.B sync_address
+specify synchronizaton listener address\&.
+(default: ::)
+.TP
+.B sync_port
+specify synchronizaton port number\&.
+(default: 24789)
+.TP
+.B sync_timeout
+specify synchronization timeout by miliseconds\&.
+if it set zero, disable timeout\&.
+(default: 60000)
+.TP
+.B sync_interval
+specify periodic synchronization interval\&.
+if it set zero, disable periodic synchronization\&.
+(default: 60000)
+.TP
+.B sync_buffer
+specify initial rule synchronization buffer size\&.
+The buffer is automatically enlarged, if needed\&.
+(default: 65536)
+
+.SH FILES
+.PP
+/opt/octopi/etc/octopi.conf
+
+.SH AUTHOR
+HANATAKA Shinya
+
+.SH COPYRIGHT
+Copyright \(co 2019 Internet Initiative Japan Inc\&.
+.br
+Copyright \(co 2019-2020 HANATAKA Shinya\&.
+
+.SH "SEE ALSO"
+octopi(1), octopi.conf(8)

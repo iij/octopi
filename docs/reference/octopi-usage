@@ -1,0 +1,205 @@
+
+== octopid (daemon)
+
+usase: octopid [options]
+
+[Daemon command line options]
+  -h		show Help
+  -v		show Version 
+  -c path	[path] config file         default: /opt/octopi/etc/octopi.conf
+  -D path	[path] rule database file  default: /var/octopi/octopidb
+  -Q path	[path] queue file          default: /var/octopi/octopiqueue
+  -S parallel   [number] Number of parallel runs of rule synchronization
+  -d		[bool] debug logging
+  -n		[bool] dry-run mode
+  -f		[bool] forground mode (not daemon)
+  -q		[bool] quiet (suppress terminal output)
+  -s		[bool] suppress syslog output
+
+
+== octopi (setting)
+
+usage: octopi [options] [command] [arguments...]
+
+[Setteing command line options]
+  -h		show Help
+  -v		show version
+  -c path	[path] config file         default: /opt/octopi/etc/octopi.conf
+  -D path	[path] rule database file  default: /var/octopi/octopidb
+  -S parallel   [number] Number of parallel runs of rule synchronization
+  -d		[bool] debug logging
+  -n		[bool] dry-run mode
+  -f		[bool] line buffering mode for terminal output
+  -q		[bool] quiet (suppress terminal output)
+  -s		[bool] suppress syslog output
+
+
+[Parameters]
+
+  vni      :=  "all" | number | "any"
+	Specifies the virtual network identifier (VNI).
+	"all" means all the VNI rules that exist.
+	"any" matches all VNIs that are not defined for fallback.
+
+  address  :=  IPv4 Address | IPv6 Address
+
+  target   :=  address/mask | "default" | "default6"
+	"default" will match all IPv4 addresses (0.0.0.0/0).
+	"default6" matches all IPv6 addresses (::/0).
+
+  relay    :=  addr | "drop" | "broadcast"
+	Specifies the address of the octopi daemon to relay to.
+	If the destination contains "drop", all destinations are disabled.
+	If "broadcast" is included in the destination, broadcast is performed.
+
+  protocol :=  "ipv4" | "ipv6" | "all"
+	Specify the protocol. If "all" is specified, both IPv4 and IPv6.
+
+  action   := "allow" | "deny"
+	Specify whether to allow or disallow access restrictions.
+
+  utype    := "auto" | "relay" | "member" | "both"
+	Specifies the type of address. If omitted or "auto" is specified,
+	"relay" will be searched first, and if not found, "member" will
+	be searched.
+
+  node     := "all" | "backup" | address
+	Specify the address of the synchronous node. Whether the address is
+	"relay" or "member" is specified in the prefix.
+
+
+[Rule command]
+
+  octopi [rule] init [pool_size  [hash_size]]
+	Initialize the rule file. the daemon needs to be restarted.
+
+  octopi [rule] list [vni [protocol]]
+	Display the rule list in command format.
+
+  octopi [rule] show [vni [protocol]]
+	Display the structure of the rule in longest path matching tree format.
+
+  octopi [rule] find vni (address | protocol)
+	Search for a rule and output the forwarding destination.
+	If protocol name is given, it searches for a broadcast.
+
+  octopi [rule] add vni target relay [relay...]
+	Add forwarding information to the rule.
+
+  octopi [rule] delete vni target [relay...]
+	Detete forwarding information to the rule.
+	Delete all forwarding information if the destination was omitted.
+
+  octopi [rule] move vni target relay [relay...]
+	Modify the forwarding information for the rule
+	(same as delete before add).
+
+  octopi [rule] flush vni [proto]
+	Remove all forwarding information from the rule to the VNI.	
+
+  octopi [rule] save [vni [protocol]]
+	Output the rule list in saved format.
+
+	rule vni
+	target relay [relay...]
+	...
+	(commit | abort)
+
+  octopi [rule] update [protocol]
+	Load the saved format from the standard input and add it to
+	the current rules.
+
+  octopi [rule] restore [protocol]
+	Load the save format from the standard input and replace it with
+	the current rules.
+
+
+[Synchronous Access Control Commands]
+
+  octopi acl list [protocol]
+	Outputs ACLs for rule synchronization in command format.
+
+  octopi acl add target action
+	Add the ACL for rule synchronization.
+
+  octopi acl delete target action
+	Remove the ACL for rule synchronization.
+		     
+
+[Synchronization node command]
+
+  octopi backup list
+	Display the list of backup nodes in command format.
+
+  octopi backup add member [member ...]
+	Add members to the backup node list.
+
+  octopi backup delete [member ...]
+	Delete members of a backup node list.
+	If the members is omitted, all backup node are deleted.
+
+  octopi node list [relay ...]
+	Display the list of synchronous nodes in command format.
+
+  octopi node add relay [member ...]
+  	Add members to the synchronous node list.
+	If the member is omitted, add the same address as the relay address.
+
+  octopi node delete relay [member ...]
+	Delete members to the synchronous node list.
+	If the members is omitted, all members of that relay address are
+	deleted.
+
+
+[Queue synchronization command]
+
+  octopi queue init [pool_size [hash_size]]
+	Initialize the synchronization queue file.
+
+  octopi queue list [relay ...]
+	Display the contents of the synchronization queue
+
+  octopi queue show [relay ...]
+	Show the structure of synchronous nodes and queues
+
+  octopi queue add [utype] node [vni]
+	Manually add a synchronization rule target.
+
+  octopi queue delete [utype] node [vni]
+	Manually delete a synchronization rule target.
+
+  octopi queue sync [[utype] node]
+	Same as octopi sync. See below.
+
+
+[Management command]
+
+  octopi [rule] sync
+	Write rule data in memory to a file, and
+	Perform one-shot rule synchronization now.
+
+  octopi [rule] pause
+	Set the Suspend flag for rules and temporarily disable all rules,
+	the daemon to non-relay (backup) mode.
+
+  octopi [rule] unpause
+	Unset the Suspend flag for rules, the daemon to relay (active) mode.
+
+  octopi [rule] fsck [normal | all]
+	Repair corrupt rule files.
+
+  octopi [rule] dump [header | all]
+	Dump the contents of the rule file for debugging.
+
+  octopi queue disable
+	Set the stop synchronization flag to disable the synchronization
+	function.
+
+  octopi queue enable
+	Remove the stop synchronization flag and re-enable the
+	synchronization function.
+
+  octopi queue dump [header | all]
+	Dump the contents of the synchronization queue for debugging.
+
+

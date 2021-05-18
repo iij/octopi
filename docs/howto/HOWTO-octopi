@@ -1,0 +1,454 @@
+=========================================================================
+        How to use Octopi
+=========================================================================
+
+* Function Overview
+
+  - The octopid (VxLAN extender daemon) relays VxLAN BUM traffic to allow
+    communication beyond the router without IP Multicast Routing.
+
+  - VxLAN is a technology that creates a virtual local network using
+    Ether over UDP encapseling, and since UDP packets is used, it can
+    communicate beyond routers, wide-area connections are possible.
+    However, special consideration is required to communicate Broadcast,
+    Unnown Unicast, Multicast (BUM traffic) beyond the router.
+
+  - Multicast, Broadcast, and Unknown Unicast in VxLAN are usually
+    encapsulated and sent over IP Multicast. For this reason, IP
+    Multicast Routing must be configured in order to communicate with
+    outside the Lokal network.
+
+  - IP Multicast Routing requires a lot of time and effort to set up and
+    operate the routers, and is limited by the capacity of the device, so
+    it does not scale out. In addition, when the network becomes large,
+    the bandwidth may be reduced by multicast packet.
+
+
+  - To address these issues, octopid provides a VxLAN Switch that
+    independently relays BUM traffic on VxLAN without IP Multicast
+    Routing.
+
+
+* Program Componet
+
+  - The Ocotpi VxLAN Extender consists of two programs, the "octopid"
+    daemon and the "octopi" command.
+
+  - "octopi" command provides a CLI for adding, deleting, and showing
+     settings and rules.
+
+  - As a daemon, octopid forks into multiple processes for each of the
+    functions listed below, and relays packets.
+
+  octopi-launcher   Start and monitor each process as a child process.
+  octopi-snipper    Monitor the network and get the BUM packets of the VxLAN
+  octopi-dispatcher Refer to the rules to determine the relay destination
+                    and send it.
+  octopi-caster     Broadcast relayed packets locally.
+  octopi-logger     Periodically output statistics to the log.
+  octopi-listener   Rule Synchronization API Server
+  octopi-kicker     Start the rule synchronization client periodically
+  octopi-talker     Rule Synchronization Client
+
+
+* Files
+
+  /opt/octopi/etc/octopi.conf       configurarion file
+
+  /var/octopi/octopidb              rule database file
+
+  /var/octopi/octopiqueue           rule synchronization queue
+
+
+
+* Netowrk Configuration (sample)
+
+  - VxLAN is a technology that configures multiple virtual local
+    networks on an IP network that allows all nodes to communicate
+    with each other as a lower layer network.
+
+  - Normally, IP Multicast Routing is used for communication beyond
+    the physical segment, but octopi can provide VxLAN communication
+    beyond the physical segment without it.
+
+  - By installing a octopid in each physical segment, IP Multicast
+    packets of VxLANs are relayed by communicating among octopids.
+
+  - Only BUM traffic is exchanged by octopid, and normal traffics
+    are send directly to target nodes.
+
+
+   physical network A                       physical network B
+   +----+----+----+----+----+---- Router ---+----+----+----+----+----+
+   |    |    |    |    |    |       |       |    |    |    |    |    |
+ node node node node node octopid   |      node node node node node octopid 
+                                    |
+                                  Router
+				    |
+                                  Router
+                                    |
+ node node node node node octopid   |      node node node node node octopid
+   |    |    |    |    |    |       |       |    |    |    |    |    |
+   +----+----+----+----+----+---- Router ---+----+----+----+----+----+
+   physical network C                       physical network D
+
+
+  node:     Servers, routers, and appliance devices that speak VxLAN
+  octopid:  The server on which the octopi daemon is running
+
+  Suppose that the following address is attached.
+     physical network A octopid 10.10.20.8
+     physical network B octopid 10.10.40.8
+     physical network C octopid 10.10.60.8     
+     physical network D octopid 10.10.80.8     
+
+  - A node can be any device that normally speaks VxLAN (multicast
+    mode). See MEMO-tutorial-linux-vxlan for how to use VxLAN with
+    Linux Server.
+    
+  - The octopid monitors the network and relays the necessary packets
+    to other octopids, and the received octopid multicast it locally.
+
+  - To which segment the octopid relays the packet depends on the rule
+    definition (see below).
+
+=========================================================================
+
+* Initial Configuration
+
+Note: Do not configure VxLAN on the server where octopid is running.
+
+1. Wwrite octopi.conf
+
+  # cd /opt/octopi/etc
+  # cp octopi.conf.sample octopi.conf
+  # vi octopi.conf
+  	interface eth0        # Rewrite the interface as appropriate.
+	address 192.168.10.11 # Rewrite the address as appropriate.
+
+  - For other settings, see doc/manual/MEMO-config
+
+
+2. Initialize the rule DB
+
+  - The pool size should be about 10 times the number of rules
+    required. (set 1,000,000 for 100,000 rules).
+
+  - The hash size should be a prime number that is at least twice the
+    number of VNIs. (set 213,131 for 100,000).
+
+  # octopi init 100,000 213,131
+  
+  - It is useful to change the group so that it can be accessed by
+    administrative users.
+
+  # chgrp admin /var/octopi/octopidb
+  # chmod g+rw /var/octopi/octopidb
+
+
+3. Start daemon
+
+  - Normally, there is no need to specify any options.
+  - See doc/manual/MEMO-usage for other detailed startup options.
+
+  # /opt/octopi/sbin/octopid
+
+
+4. Confirm that it has started.
+
+  # ps axf | grep octopi
+    11440 ?        S      0:00 octopi-launcher
+    11443 ?        S      0:00  \_ octopi-snipper
+    11444 ?        S      0:00  \_ octopi-dispatcher
+    11445 ?        S      0:00  \_ octopi-dispatcher
+    11446 ?        S      0:00  \_ octopi-dispatcher
+    11447 ?        S      0:00  \_ octopi-dispatcher
+    11448 ?        S      0:00  \_ octopi-dispatcher
+    11449 ?        S      0:00  \_ octopi-dispatcher
+    11450 ?        S      0:00  \_ octopi-dispatcher
+    11451 ?        S      0:00  \_ octopi-dispatcher
+    11452 ?        S      0:00  \_ octopi-caster
+    11453 ?        S      0:00  \_ octopi-caster
+    11454 ?        S      0:00  \_ octopi-caster
+    11455 ?        S      0:00  \_ octopi-caster
+    11456 ?        S      0:00  \_ octopi-logger
+
+
+* Virtual Server
+
+  - When octopi is used in a virtual server, depending on the
+    hypervisor type, IP Multicast packets may not reach the virtual
+    server. (It may be solved by executing the following command in the
+    virtual server.)
+
+  # ip maddress add 01:00:5E:XX:XX:XX dev eth0
+
+  - eth0 is an interface to monitor multicast
+  - XX:XX:XX is the lower 23 bits of the IP Multicast Address.
+  - If you want to use IPv6 for the lower layer network
+
+  # ip maddress add 33:33:XX:XX:XX:XX dev eth0
+
+  -  XX:XX:XX:XX is the lower 32 bits of the IPv6 Multicast Address.
+    
+
+* Auto-Start (by systemd)
+
+  - for automatic startup using systemd
+
+  # vi /etc/systemd/system/octopid.service
+	[Unit]
+	Description=Octopi VxLAN Extender
+	After=syslog.target network-online.target
+	Wants=network-online.target
+	ConditionFileNotEmpty=/opt/octopi/etc/octopi.conf
+
+	[Service]
+	Type=forking
+	KillMode=process
+	ExecStart=/opt/octopi/sbin/octopid
+
+	[Install]
+	WantedBy=multi-user.target
+
+  # systemctl daemon-reload
+  # systemctl enable octopid
+  # systemctl start octopid
+
+
+=========================================================================
+
+==== Sample Configuration 1: Simple Small Network
+
+  - Method to relay all VxLAN Multicast to all octopid
+  - Suitable for small network connections.
+  - This method is easy to operate because it can be set up once and
+    then left alone.
+  - However, as the number of connected networks increases, latency
+    and bandwidth occupation may become a problem. In that case, the
+    following methods are recommended
+
+* Adding Rrules
+
+  - In the above network example, set the following rules for all
+    octopids.
+
+  # octopi add any default  10.10.20.8 10.10.40.8 10.10.60.8 10.10.80.8
+  # octopi add any default6 10.10.20.8 10.10.40.8 10.10.60.8 10.10.80.8 
+
+  - This rule indicates that all multicast IPv4/IPv6 packets of all
+    VNIs should be relayed by other octopids.
+
+  Syntax: octopi add  VNI target address forward-to [forward-to...]
+
+    - "any" is the target VNI number, it matches all undefined VNIs
+    - default matches all IPv4 addresses (same as 0.0.0.0/0)
+    - default6 matches all IPv6 addresses (same as ::/0)
+    - 10.10.20.1, 10.10.40.1, 10.10.60.1, and 10.10.80.1 are the
+      addresses of the octopid.
+
+=========================================================================
+
+==== Sample Configuration 2: Network Rule
+
+  - Specify the network to be configured for each individual VNI.
+  - When the number of VNIs increases or the network configuration
+    participating in a VNI changes, the rule needs to be changed, but
+    it does not need to be specified on an individual host basis.
+  - Suitable for cases where there are a large number of networks in
+    total but a small number of physical networks per VNI.
+
+* Adding Rrules
+
+  # octopi add 100 default 10.10.20.8 10.10.40.8
+  # octopi add 200 default 10.10.20.8 10.10.60.8
+  # octopi add 300 default 10.10.40.8 10.10.60.8 10.10.80.8 
+  # octopi add  ...
+
+  - If IPv6 is used, set default6 as well.
+  - Each VNI can limit the number of participants so that no
+    unnecessary packets are sent.
+
+=========================================================================
+
+==== Sample Configuration 2: Node Rule
+
+  - In the above method, the destination of the packet is specified in
+    the octopid for each network, but for ARP and Unknown Unicast,
+    there is only one destination that should receive the packet.
+  - If you know where they are in advance, you can send them to only
+    one network, preventing delays and wasting bandwidth.
+
+* Adding Rrules
+
+  # octopi add 100 192.168.20.71 10.10.40.8
+  # octopi add 100 192.168.20.72 10.10.60.8
+  # octopi add 100 192.168.20.73 10.10.40.8
+  # octopi add 100 ...
+
+  - This setting specifies that in VNI 100, the server with
+    192.168.20.71 is in network B, so it only needs to relay to the
+    octopid (10.10.40.8) in network B.
+
+  - It is also possible to specify them all together in CIDR format as
+    follows. In this case, the longest path matching is used to select
+    the forwarding destination.
+
+  # octopi add 100 192.168.0.0/16     10.10.40.8
+  # octopi add 100 192.168.30.0/24    10.10.60.8
+  # octopi add 100 192.168.30.64/28   10.10.20.8
+
+
+=========================================================================
+
+* Adding/Deleting Rules  (sample)
+
+   - Adding: Relay 10.99.10.21 of VNI 150 to octopid(192.168.77.15)
+
+   # octopi add  150  10.99.10.21/32   192.168.77.15
+                 ---  --------------   --------------
+                 VNI  CIDR(VxLAN)      octopi address
+
+  - Deleting: the above settings.
+
+  # octopi delete  150  10.99.10.21/32   192.168.77.15
+
+
+  - Inter-network transfer of 10.99.10.21 in VNI 150 to relay to
+    192.168.77.19
+
+  # octopi move 150 10.99.10.21/32 192.168.77.19
+  ** See also the Live Migration section.
+
+
+  - Display the rule settings for VNI 150
+
+  # octopi list 150
+
+
+  - Check the rule tree (internal state) of VNI 150
+
+  # octopi show 150
+
+
+  - Export all settings to a save file.
+
+  # octopi save > savefile
+
+
+  - Restore settings from a save file (data not in the file will be
+    deleted).
+
+  # cat savefile | octopi restore 
+
+
+  - Overwrite and merge save file rules with current settings
+
+  # cat savefile | octopi update
+
+
+  - Delete all rules in VNI 150
+
+  # octopi flush 150
+
+
+* Special rule notation
+
+  - If "default" is specified as the target, 0.0.0.0/0 will match all IPv4.
+  - If "default6" is specified as the target, ::/0 will match all IPv6.
+
+  - If "drop" is specified as the relay destination, it will not relay
+    to anywhere.
+  - If you specify "broadcast" as the relay destination, it will relay
+    to all sites in VNI.
+
+  - "any", it is a wildcard VNI; if VNI is undefined, fallback to "any".
+
+
+* Operational commands
+
+  - Suspend all rules and enter non-relay (backup) mode
+
+  # octopi pause
+
+
+  - Release the pause and enter the relay (active) mode.
+
+  # octopi unpause
+
+
+  - Synchronously write the contents of the rule DB in memory to a
+    file (not necessary for normal operation)
+
+  # octopi sync
+
+
+  - Automatically repair corrupted rule DB (not necessary in normal
+    operation)
+
+  # octopi fsck
+
+=========================================================================
+
+* Live migration of virtual servers
+
+  - If you want to move a virtual host to another physical network in
+    live migration, you can take the following steps.
+
+  - The following example moves 192.168.20.80 on VNI 100 from the
+    network with octopid (10.10.20.8) to the network with octopid
+    (10.10.80.8).
+
+
+1. Check the source of movement.
+
+  # octopi list 100
+  ...
+  octopi add  100 192.168.20.80  10.10.20.8
+  ...
+
+2. Add the destination and make sure it is transferred to both.
+
+  # octopi add  100 192.168.20.80  10.10.80.8 
+  # octopi list 100
+  ...
+  octopi add  100 192.168.20.80  10.10.20.8 10.10.60.8
+  ...
+
+3. Performed live migration
+
+  # strat-live-migratuion 
+
+
+4. Delete the source
+
+  # octopi delete  100 192.168.20.80  10.10.20.8
+
+
+=========================================================================
+
+* Security Considerations
+
+  - In VxLAN, the target nodes basically communicate with each other
+    on a peer-to-peer basis, and octopid only relays BUM packets.
+    Therefore, the security level of a VxLAN network depends on
+    the security level of the lower layer network.
+
+  - The octopid itself has two security mechanisms, secret and timeout,
+    but these are not meant to guarantee complete security, but rather
+    are simple countermeasures against misconfiguration and equipment
+    failure.
+
+  - By setting "secret" string in octopi.conf, relay packets are signed
+    with MD5, and the receiver checks it and discards the packet if they
+    do not match. This prevents misdirected or casually forged packets
+    from being relayed. There is a problem in performance degradation
+    due to the CPU required to calculate the MD5.
+
+  - By setting a "timeout" (in milliseconds) in octopi,conf, packets
+    that take longer to relay will be discarded. This can prevent
+    repeat attacks and stray packets from remaining in the network.
+    There is a problem that packets cannot be relayed if the host's
+    clock is out of sync or delayed due to network congestion.
+
+=========================================================================

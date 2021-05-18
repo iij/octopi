@@ -1,0 +1,81 @@
+=========================================================================
+        Linux のネットワーク・コンテナー内で octopi を動かす方法
+=========================================================================
+
+注意: 一般的な docker や rocket などのシステムによる、コンテナの場合は
+      ネットワークを macvlan 等に設定してやれば、普通に octopi は動く。
+      (ただしセキュリティ・フィルターを外すことを忘れないこと)
+
+ここではより原始的に、手作業で macvlan とネットワーク・コンテナを作成
+して、その中で octopid を使用する方法を説明する。
+
+
+=========================================================================
+○インストール
+
+  - インストール方法については doc/howto/MEMO-howto-install を参照
+
+○設定
+
+  - 以下をシェルスクリプにしておいて、サーバー起動時に呼び出すと便利
+
+1. なければコンテナ用の設定ディレクトリを作成。 (以下 sc0 はコンテナ名)
+
+  # mkdir -p /etc/netns/sc0
+
+
+2. 設定ディレクトリ内に resolv.conf がなければ作成
+
+  # test -f /etc/netns/sc0/resolv.conf || cp /etc/resolv.conf /etc/netns/sc0
+
+
+3. コンテナを作成
+
+  # /sbin/ip netns add sc0
+
+
+4. macvlan インターフェイスを作成してコンテナに渡す
+   (ここで eth0 は物理インターフェイス、tmp_sc0 は仮の名前)
+
+  # /sbin/ip link add link eth0 address 88:00:00:00:00:12 name tmp_sc0
+            type macvlan mode bridge
+  # /sbin/ip link set tmp_sc0 netns sc0
+
+
+5. ループバック・インターフェイスの設定
+
+  # /sbin/ip netns exec sc0 /sbin/ip link set lo up
+
+
+6. macvlan インターフェイスの設定
+
+  # /sbin/ip netns exec sc0 /sbin/ip link set tmp_sc0 name eth0
+  # /sbin/ip netns exec sc0 /sbin/ip link set eth0 mtu 1600 up
+  # /sbin/ip netns exec sc0 /sbin/ip address add dev eth0 192.168.10.12/24
+  # /sbin/ip netns exec sc0 /sbin/ip address add dev eth0 fd00:2000:10::12/64
+  # /sbin/ip netns exec sc0 \
+          /sbin/ip route add dev eth0 default via 192.168.10.1
+
+
+7. octopid を起動
+
+  # /sbin/ip netns exec sc0 /opt/octopi/sbin/octopid
+
+  - 自動起動している場合には起動コマンドを上記のように書き換える
+  - ネットワーク・コンテナ初期化後に起動するように設定する必要がある
+
+=========================================================================
+○ keepalived を同じコンテナ内で動かす手順
+
+  - 基本的には MEMO-howto-keepalived に書かれてり方法と同じだが
+
+1. ループバックへの仮想 IP はコンテナに設定する
+
+   /sbin/ip netns exec sc0 \
+           /sbin/ip addrss add dev lo 192.168.10.11/32 scope host
+
+2. デーモンの起動をコンテナ内で行なう
+
+   /sbin/ip netns exec sc0 /usr/sbin/keepalived -P
+
+=========================================================================

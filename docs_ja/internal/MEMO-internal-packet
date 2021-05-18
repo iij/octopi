@@ -1,0 +1,71 @@
+-----------------------------------------------------------------------------
+[MTU]
+
+1500  基本パケット(overlay)
+1550  基本パケット + VxLAN(IPv4 underlay)
+1600  基本パケット + octopi relay (IPv4 underlay)
+
+1500  基本パケット(overlay)
+1570  基本パケット + VxLAN(IPv6 underlay)
+1644  基本パケット + octopi relay (IPv6 underlay)
+
+-----------------------------------------------------------------------------
+[Fieald Size]
+
+ether header	14 bytes
+ip header	20 bytes or 40 bytes
+udp header	 8 bytes
+-----------------------
+  total		42 bytes or 62 bytes
+   
+vxlan header	 8 bytes
+-----------------------
+  total		 8 bytes
+
+magic		 1 byte	 0xF1
+version		 1 byte	 0x41:IPv4, 0x61:IPv6
+random		 2 byte
+secret		16 bytes
+time_sec	 4 bytes
+time_usec	 2 bytes
+site_begin	 4 bytes
+site_end	 4 bytes
+outer_src_ip	 4 bytes or 16 bytes
+outer_dst_ip	 4 bytes or 16 bytes
+outer_src_port	 2 bytes
+outer_dst_port	 2 bytes
+outer_udp_len    2 bytes
+outer_udp_csum   2 bytes
+vxlan_flag       4 bytes
+vni		 4 bytes
+-----------------------
+  total		58 bytes or 82 bytes
+
+-----------------------------------------------------------------------------
+[Header Reconstruction]
+
+outer_src_mac:	送信元の物理ノード ⇒ caster の物理MAC
+outer_dst_mac:	マルチキャストMAC  ⇒ IP destination から
+			01-00-5e-xx-xx-xx/23 (IPv4 multicast)
+			33-33-xx-xx-xx-xx/32 (IPv6 multicast)
+outer_etype:	IPv4 or IPv6       ⇒ magic より再構成
+outer_ip:	送信元で設定       ⇒ 最構築
+outer_ip_ttl:   送信元で設定       ⇒ 固定(1)
+outer_ip_csum:	送信元で計算       ⇒ 再計算
+outer_src_ip:	送信元ノードのIP   ⇒ 要転送
+outer_dst_ip: 	マルチキャストIP   ⇒ 要転送 (224.0.0.0/4, ff00::/9)
+udp_src_port:   送信元で選択       ⇒ 保存
+udp_dst_port:	4789               ⇒ 保存
+udp_csum        送信元で計算       ⇒ 保存
+udp_len:        送信元で計算       ⇒ 保存
+vxlan_flag      固定               ⇒ 保存
+vxlan_id        送信元で設定       ⇒ 保存
+inner_src_mac:	送信元の仮想ノード ⇒ 保存
+inner_dst_mac:	マルチキャストMAC  ⇒ 保存
+			ff-ff-ff-ff-ff-ff (broadcast)
+			01-00-5e-xx-xx-xx (v4 IGMP)
+			33-33-xx-xx-xx-xx (v6 link local mcast0
+inner_src_ip:	送信元の仮想ノード ⇒ 保存
+inner_dst_ip:	宛先の仮想ノード   ⇒ 保存
+
+-----------------------------------------------------------------------------

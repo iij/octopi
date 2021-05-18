@@ -1,0 +1,165 @@
+
+== config file
+
+  - Default Path: /opt/octopi/etc/octopi.conf
+  - You can specify it with the -c option at startup.
+
+
+== Basic Settings
+
+  user			[string/number]		default: daemon
+  - User of the daemon. It can be specified by user name or UID.
+
+  group			[string/number]		default: daemon
+  - group of the daemon. It can be specified by group name or GID.
+
+  pid_file		[path]			default: [none]
+  - specify the absolute path of pid file.
+  - If unspecified, pid file is not created.
+
+  log_facility		[string]		default: local0
+  - The syslog facility of the logging.
+
+  log_interval		[second]        default: 300  range: 0-86400
+  - Specifies the output interval of the statistics log.
+  - If 0 is specified, no statistics log will be output.
+  - The output timing is calculated from the local time.
+
+
+== Network Settings
+
+  interface		[string]	default: eth0
+  - Specify the interface to talk VxLAN
+
+  address		[address]	default: address of interface
+  - Specifies the source address to be used by the daemon when
+    relaying packets.
+  - If not specified, the address of the interface will be used.
+
+  multicast		[address]	default: 239.0,0.0/8
+  - Specifies the multicast range used by the VxLAN. Multiple values
+    can be specified.
+  - 230.0.0.0/8 is the entire private area
+
+  vxlan_port		[number]	default: 4789
+  - Specifies the port number of the VxLAN.
+  - If omitted, the IANA standard 4789 will be used.
+
+  relay_port		[number]	default: 14789
+  - Specify the port number that the daemon uses to relay packets.
+
+  timeout		[milli-second]	default: 0 (disabled)
+  - Specifies the allowable packet delay in milliseconds.
+  - Packets delayed beyond the specified time will be discarded. Time
+    synchronization is important.
+  - If 0 is specified, timestamp check is not performed.
+
+  caster_ttl		[number]	default: 1
+  - TTL to be set for relayed multicast packets.
+  - Normally, there is no problem leaving it at 1.
+
+  secret		[string]	default: (disabled)
+  - Shared secret for MD5 signing during relay.
+  - If omitted, MD5 signing and MD5 checking are not performed.
+
+
+== Number of Processes
+
+  snipper_procs		[number]	default: 1  range: 0-1
+  - Specifies the number of octopi_snipper daemon to read packets.
+  - Fixed to 1 if used.
+
+  dispatcher_procs	[number]	default: 8  range: 0-100
+  - Specifies the number of octopi_snipper daemon to relay packet.
+  - It is recommended to specify the number of CPU cores.
+
+  caster_procs		[numbe]		default: 4  range: 0-100
+  - Specifies the number of octopi_caster daemon processes to broadcat.
+  - It is recommended to specify about half of the number of CPU cores.
+
+  logger_procs		[number]	default: 1  range: 0-1
+  - Specifies the number of processes of the octopi_logger daemon that
+    output the statistics log.
+  - Specify 0 or 1. 0 means no statistics log is output.
+
+  listner_procs		[number]	default: 0  range: 0-100
+  - Specifies the number of octopi_listener daemon to listen for rule
+    synchronization.
+  - For children of rule synchronization, it is recommended to specify
+    about 2.
+
+  kicker_procs		[number]	default: 0  range: 0-1
+  - Specifies the number of octopi_kicker daemon processes to
+    synchronize rules periodically.
+  - If 0 is specified, periodic rule synchronization will not be performed.
+
+  talker_procs		[number]	default: 8  range: 0-100
+  - Specifies the maximum number of octopi_talker processes that will
+    perform rule synchronization.  
+  - This is the limit of the number of parallelism when synchronizing
+    rules to multiple destinations at the same time.
+  - If you have a large number of rule synchronization destinations, you
+    can use a large value. (As long as you have enough memory).
+
+
+== Rule Database Settings
+
+  rule_file		[path]		default: /var/octopi/octopidb
+  - Specify the location of the rules database.
+
+  pool_size		[number]	default: 1000000  range: 1000-16777216
+  - Specify the size of the rule pool.
+  - This value is used when the pool size is omitted when creating.
+  - It is recommended to specify at least 10 times the number of rules
+    that are expected to be used.
+
+  hash_size		[number]	default: 231313   range: 1000-16777216
+  - Specifies the size of the VNI hash in the rule file.
+  - This value is used when the hash size is omitted when creating.
+  - It is recommended to specify a prime number that is at least twice
+    the number of networks expected to be used.
+
+
+== Synchronization Queue Settings
+
+  queue_file		[path]		default: /var/octopi/octopiqueue
+  - Specifies the location of the synchronization queue.
+
+  queue_pool_size	[number]	default: 100000  range: 1000-16777216
+  - Specifies the size of the synchronization queue.
+  - This value is used when the size s omitted at when creating.
+  - The recommended value is about the number of networks to be used.
+
+  hash_size		[number]	default: 23131   range: 1000-16777216
+  - Specifies the size of the destination address hash of the
+    synchronization queue.
+  - This value is used when the hash size is omitted when creating.
+  - It is recommended to specify a prime number that is at least five
+    times larger than the synchronization destination.
+
+
+== Synchronization Settings
+
+  sync_address		[address]	default: ::
+  - Specify the listening address for rule synchronization.
+  - If 0.0.0.0 is specified, it will be all IPv4 attached to the server.
+  - If :: is specified, all IPv6 attached to the server will be used.
+    IPv6 mapped IPv4 allows you to connect to IPv4 as well.
+
+  sync_port		[number]	default: 24789
+  - Specify the port number to use for rule synchronization.
+
+  sync_timeout		[milli-second]	default: 60000
+  - Specifies the maximum allowable delay time when synchronizing rules.
+  - If this time is exceeded, the synchronization is aborted, returned
+    to the queue, and resent later.
+
+  sync_interval		[milli-second]	default: 60000
+  - Specifies the interval at which rule synchronization is kicked
+    periodically.
+  - If 0 is specified, automatic rule synchronization will not be
+    started automatically  
+
+  sync_buffer		[bytes]		default: 65536
+  - Specify the initial size of the buffer for rule synchronization.
+  - No need to change it in general, because it will be expanded as needed.

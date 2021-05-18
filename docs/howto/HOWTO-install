@@ -1,0 +1,61 @@
+=========================================================================
+        HowTo install octopi
+=========================================================================
+Note: octopi is only available on Linux.
+
+
+1. Prepare the library to be used
+
+   - It requires libcap and libpcap, so install the development kit
+     beforehand.
+
+    -- On Ubuntu
+    # apt install libcap-dev
+    # apt install libpcap-dev
+
+    -- On RedHat / CentOs
+    # yum install libcap-devel
+    # yum install libpcap-devel
+
+
+2. Rewrite the installation directory (if necessary)
+
+    - If you want to change the installation directory, you need to
+      rewrite the Makefile directly.
+    
+    $ vi src/Makefile
+	BASEDIR         = /opt/octopi
+	MANDIR          = /usr/share/man
+	DATADIR         = /var/octopi
+
+3. Compile
+
+    $ cd src
+    $ make
+
+
+4. install
+
+    # make install
+
+
+5. link the command (optional)
+
+    - It is useful to link the configuration command to the path.
+
+    # ln -s /opt/octopi/bin/octopi /usr/bin   
+
+
+6. OS tuning (optional)
+
+    - There are differences in the initial values depending on the
+      distribution and kernel version, so make adjustments.
+
+    # vi /etc/sysctl.conf
+	    net.unix.max_dgram_qlen=1024
+	    net.core.rmem_max=1638400
+	    net.default.rmem_max=1638400
+	    net.core.wmem_max=1638400
+	    net.default.wmem_max=1638400
+    # sysctl -p
+

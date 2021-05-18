@@ -1,0 +1,155 @@
+-----------------------------------------------------------------------------
+* Structure of Synchronize Queue
+
+Header               256 bytes   
+  Magic                  8 bytes   fixed string (4f 43 54 4f 50 49 51 55)
+  Major version          4 bytes   1
+  Minor version          4 bytes   2
+  node size              4 bytes   64
+  node number size       4 bytes   4
+  header size            4 bytes   256
+  pool size              4 bytes   variable
+  hash size              4 bytes   variable
+  data area size         4 bytes   
+  total file size        4 bytes
+  pool head              4 bytes   (node position)
+  pool tail              4 bytes   (node position)
+  reserved               all lefts
+
+Node                    64 byte * pool size
+   type                  1 byte   0:None 1:Relay 2:Backup 3:Member 4:Queue
+   proto                 1 byte   1:IPv4 2:IPv6 3:all
+   mark                  1 byte
+   action;               1 byte   0:none 1:sync
+   reserved              4 bytes
+   next                  4 bytes  (node position)
+   link                  4 bytes  (node position)
+   relay                 4 bytes  (node position)
+   member                4 bytes  (node position)
+   queue                 4 bytes  (node position)
+   update                4 bytes  (count)
+   sync                  4 bytes  (count)
+   update_time           8 bytes  (UNIX TIME)
+   addr                 16 bytes IPv4 or IPv6 or VNI
+
+Hash                     4 bytes * hash size
+   num                   4 bytes  (node position)
+
+-----------------------------------------------------------------------------
+[Pool]
+- queue for unused nodes
+- New items are taken out of pool_head and deleted items are returned
+  to pool_tail
+
+  pool_head                          pool_tail
+           \                                  \
+            node=node=node=node=node=node=node=node
+
+[Hash]
+
+  (address hash)
+              \
+	       member - member
+              \
+	       relay
+              \
+	       relay - member - member - relay
+              \
+	       member
+	       
+[Queue Tree]
+
+  backup
+    |
+    +-- member - queue
+
+  relay
+    |
+    +-- member - queue
+    |
+    +-- member - queue
+    |
+    +-- member
+
+  relay
+    |
+    +-- member - queue - queue - queue
+    |
+    +-- member
+
+-----------------------------------------------------------------------------
+* Selection of synchronization target (member)
+
+  - The queue is not empty.
+  - sync count is less than update count
+  - Not currently in sync.
+  - The oldest update time
+
+-----------------------------------------------------------------------------
+* Synchroization
+
+== Generating rules
+  1. Open the synchronization queue.
+  2. List the rules in memory.
+     - If ALL is included in the target VNI, all rules that contain relays
+       to the target.
+     - If the target does not contain ALL, the rules of the VNI in the queue
+  3. Save the current update count.
+  4. Set action = 1, close the sync queue once
+     - Allow other processes to use the synchronization queue during network
+       communication.
+
+== Synchronization via network communication.
+  5. Connect to the target server via TCP
+  6  Send in the rules.
+     - If the target VNI contains ALL, use restore mode
+     - If the target VNI does not contain ALL, use the update mode.
+
+== If the Synchronization is successful
+  7. Open the sync queue again.
+  8. Delete all queues older than the update count that were saved.
+  9. Set sync count to the same as the update count that was saved.
+ 10. Set action = 0 and close the sync queue.
+
+== If the synchronization fails
+  7. Open the sync queue again.
+  8. Set action = 0 and close the sync queue.
+
+-----------------------------------------------------------------------------
+* Timestamp
+
+== Timestamp of RELAY, BACKUP 
+  INSERT_TIME (creation time)
+    - when relay/backup 
+
+  UPDATE_TIME (update time)
+    - when relay/backup
+    - when member is added or removed
+
+
+== Timestamp of MEMBER
+  INSERT_TIME (queue creation time)
+    - when member
+    - when first queue is inserted
+
+    * This is the display time of queue list command.
+
+  UPDATE_TIME (queue update time)
+    - when member
+    - when first queue is inserted
+    - when last queue is deleted
+    - when SYNC begin
+    - when SYNC end
+
+    * Start the next update in order of this time.
+
+
+== Timestamp of QUEUE
+  INSERT_TIME (queue item creaion time)
+    - when queue item created
+
+  UPDATE_TIME (queue item append time)
+    - when queue item created
+    - when same queue item is re-added.
+
+-----------------------------------------------------------------------------

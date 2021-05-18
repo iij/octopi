@@ -1,0 +1,200 @@
+
+== octopid (daemon)
+
+usase: octopid [options]
+
+[デーモンの起動オプション]
+  -h		Help 表示
+  -v		version 表示
+  -c path	[path] コンフィグファイル  default: /opt/octopi/etc/octopi.conf
+  -D path	[path] ルールファイル      default: /var/octopi/octopidb
+  -Q path	[path] キューファイル      default: /var/octopi/octopiqueue
+  -S 平行数	[number] ルール同期の平行実行数
+  -d		[bool] デバッグ情報を出力する
+  -n		[bool] ドライラン・モード
+  -f		[bool] フォアグラウンド・モード(デーモン化しない)
+  -q		[bool] 画面への出力を抑制
+  -s		[bool] syslog 出力を抑制
+
+
+== octopi (command)
+
+usage: octopi [options] [command] [arguments...]
+
+[コマンドの起動オプション]
+  -h		Help 表示
+  -v		version 表示
+  -c path	[path] コンフィグファイル default: /opt/octopi/etc/octopi.conf
+  -D path	[path] ルールファイル     default: /var/octopi/octopidb
+  -Q path	[path] キューファイル     default: /var/octopi/octopiqueue
+  -S 平行数	[number] ルール同期の平行実行数
+  -d		[bool] デバッグを出力する
+  -n		[bool] ドライラン・モード
+  -f		[bool] 出力をラインバッファにする
+  -q		[bool] 画面への出力を抑制
+  -s		[bool] syslog出力を抑制
+
+
+[パラメーター]
+
+  vni      :=  "all" | number | "any"
+	仮想ネットワーク識別子(VNI)を指定する。
+	"all" は存在する全ての VNI ルールを意味する。
+	"any" はフォールバック用で定義のない VNI 全てに一致する。
+
+  address  :=  IPv4 Address | IPv6 Address
+
+  target   :=  address/mask | "default" | "default6"
+	"default" は全ての IPv4 アドレスにマッチする (0.0.0.0/0)。
+	"default6" は全ての IPv6 アドレスにマッチする (::/0)。
+
+  relay    :=  addr | "drop" | "broadcast"
+	中継先の octopi デーモンのアドレスを指定する。
+	中継先に "drop" が含まれている場合は全ての宛先を無効化する
+	中継先に "broadcast" が含まれている場合はブロードキャストする。
+
+  protocol :=  "ipv4" | "ipv6" | "all"
+	プロトコルを指定する。"all" を指定すると IPv4 と IPv6 の両方。
+
+  action   := "allow" | "deny"
+	アクセス制限の許可/不許可を指定する
+
+  utype    := "auto" | "relay" | "member" | "both"
+	アドレスの種別を指定する。省略もしくは "auto" を指定した場合は
+	まず "relay" を検索し見つからなければ "member" を検索する。
+
+  node     := "all" | "backup" | address
+	同期ノードのアドレスを指定する。アドレスが relay なのか member な
+	のかは前置指定する。
+
+
+[ルール・コマンド]
+
+  octopi [rule] init [pool_size  [hash_size]]
+	ルールファイルを初期化する.要デーモンの再起動。
+
+  octopi [rule] list [vni [protocol]]
+	ルール一覧をコマンド形式で表示する。
+
+  octopi [rule] show [vni [protocol]]
+	ルールの構造を最長パス一致ツリー形式を表示する。
+
+  octopi [rule] find vni (address | protocol)
+	ルールを検索して転送先を出力する。
+	protocol が指定されたらブロードキャストを検索する。
+
+  octopi [rule] add vni target relay [relay...]
+	ルールに転送情報を追加する。
+
+  octopi [rule] delete vni target [relay...]
+	ルールを転送情報を削除する。
+	転送先が省略された対応する全ての転送情報を削除する。
+
+  octopi [rule] move vni target relay [relay...]
+        ルールの転送情報を変更する(delete して add と同じ)。
+
+  octopi [rule] flush vni [proto]
+	ルールから VNI に転送情報を全て削除する。
+
+  octopi [rule] save [vni [protocol]]
+	ルール一覧を保存形式で出力する。
+
+	rule vni
+	target relay [relay...]
+	...
+	(commit | abort)
+
+  octopi [rule] update [protocol]
+	標準入力からの保存形式を読み込み、現在のもに追加する。
+
+  octopi [rule] restore [protocol]
+	標準入力からの保存形式を読み込み、現在のものと入れ替える。
+
+
+[同期アクセス制御コマンド]
+
+  octopi acl list [protocol]
+	ルール同期の ACL をコマンド形式で出力する。
+
+  octopi acl add target action
+	ルール同期の ACL を追加する。
+
+  octopi acl delete target action
+	ルール同期の ACL を削除する。
+		     
+
+[同期ノード・コマンド]
+
+  octopi backup list
+	バックアップノードの一覧をコマンド形式で表示する。
+
+  octopi backup add member [member ...]
+	バックアップノードのメンバーを追加する。
+
+  octopi backup delete [member ...]
+	バックアップノードのメンバーを削除する。
+	メンバーを省略した場合は全てのメンバーを削除する。
+
+  octopi node list [relay ...]
+	同期ノードの一覧をコマンド形式で表示する。
+
+  octopi node add relay [member ...]
+	同期ノードのメンバーを追加する。
+	メンバーを省略した場合は転送先と同じアドレスを追加する。
+
+  octopi node delete relay [member ...]
+	同期ノードのメンバーを削除する。
+	メンバーを省略した場合はその転送先の全てのメンバーを削除する。
+
+
+[同期キュー・コマンド]
+
+  octopi queue init [pool_size [hash_size]]
+	同期キュー・ファイルを初期化する。
+
+  octopi queue list [relay ...]
+	同期キューの内容を表示する。
+
+  octopi queue show [relay ...]
+	同期ノードとキューの構造を表示する。
+
+  octopi queue add [utype] node [vni]
+	手動で同期予定を追加する。
+
+  octopi queue delete [utype] node [vni]
+	手動で同期予定を削除する。
+
+  octopi queue sync [[utype] node]
+	octopi rule sync と同じ。以下を参照。
+
+
+[管理コマンド]
+
+  octopi [rule] sync
+	メモリ上のルールデータをファイルに書き込む。
+	1回のみのルール同期を即座に開始する。
+
+  octopi [rule] pause
+	ルールの停止フラグを設定し、全ルールを一時的に無効化する
+	デーモンを非中継(バックアップ)モードにする。
+
+  octopi [rule] unpause
+  	ルールの停止フラグを解除し、ルールを再び有効化する。
+	デーモンを中継(アクティブ)モードにする。
+
+  octopi [rule] fsck [normal | all]
+	ルールファイルの破損を修復する。
+
+  octopi [rule] dump [header | all]
+	ルールファイルの内容をデバッグ用にダンプする。
+	
+  octopi queue disable
+	同期停止フラグを設定し、同期機能を無効化する。
+
+  octopi queue enable
+	同期停止フラグを解除し、同期機能を再び有効化する。
+
+  octopi queue dump [header | all]
+	同期キューの内容をデバッグ用にダンプする。
+
+

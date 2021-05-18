@@ -1,0 +1,79 @@
+[Capsule]
+outer dst mac が multicast でない
+	⇒ DROP
+
+outer ether type が IPv4 か IPv6 でない
+	⇒ DROP
+
+outer dst IP が config で指定した multicast 範囲でない
+	⇒ DROP
+
+outer IP protocol が UDP でない
+	⇒ DROP
+
+outer UDP port が指定したもの(4789)でない
+	⇒ DROP
+
+outer UDP data が VxLAN header でない
+	⇒ DROP
+
+inner ether type が ARP, IPv4, IPv6 でない
+	⇒ DROP
+
+
+[ARP]
+arp_hw_type が ETHER でない
+	⇒ DROP
+
+arp_proto_type が IP でない
+	⇒ DROP
+
+arp_hw_len が 6でない
+	⇒ DROP
+
+arp_proto_len が 4 でない
+	⇒ DROP
+
+arp_op が request でも response でもない
+	⇒ DROP
+
+sender_ip と target_ip が等しい(Gratuitous ARP)
+	⇒ FLOOD
+
+arp_op が request で sender_ip が 0 (Duplicate Address Detection)
+	⇒ FLOOD
+
+arp_op が request
+	⇒ SWITCH (target_ip)
+
+それ以外
+	⇒ DROP
+
+
+[IPv4]
+どれでも (unknown unicast)
+	⇒ SWITCH (dst ip4)
+
+
+[IPv6]
+next header が ICMPV6 でない(unknown unicast)
+	⇒ SWITCH (dst ip6)
+
+icmp Type が 135, 136 でない
+	⇒ SWITCH (dst ip6)
+
+icmp code が 0 でない
+	⇒ SWITCH (dst ip6)
+
+code 136 (Advertisement) で solicited flag が 0 で
+dst ipv6 が 0 また FF00::/8(Unsolicited Advertisement)
+	⇒ FLOOD
+
+code 135 (Solicitation) で src ip が未指定(::) (Duplicate Address Detection)
+	⇒ FLOOD
+
+code 135 (Solicitation)
+	⇒ SWITCH (target address)
+
+それ以外 (unknown unicast)
+	⇒ SWITCH (dst ip6)

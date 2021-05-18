@@ -1,0 +1,7 @@
+Octopi VxLAN extender
+
+インストール方法については docs_ja/howto/MEMO-howto-install を参照
+
+基本的な使用法については docs_ja/howto/MEMO-howto-octopi を参照
+
+コマンドの詳細な説明は man page もしくはと docs_ja/reference 以下を参照

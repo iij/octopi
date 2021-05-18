@@ -1,0 +1,24 @@
+
+== リロード・シグナル
+
+  - リロード・シグナルはないので octopi.conf を書き換えた場合には
+    stop/start する必要がある
+
+
+== 停止シグナル
+
+  - とりあえず停止させたいだけなら pkill octopid とすれば良い
+  
+		親 (launcher)		子 (snipper, dispatcher, ...)
+    SIGINT	全部終了する     ⇒	終了する
+    SIGTERM	全部終了する     ⇒	終了する
+
+
+== デバッグシグナル
+
+  - 以下 3つはデバッグ用なので通常は使用する必要はない
+  
+		親 (launcher)		子 (snipper, dispatcher, ...)
+    SIGHUP	子供のみ再起動   ⇒	終了する
+    SIGUSR1	デバッグ出力開始	デバッグ出力開始 
+    SIGUSR2	デバッグ出力停止	デバッグ出力停止

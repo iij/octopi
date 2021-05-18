@@ -1,0 +1,153 @@
+=========================================================================
+        HowTo use VxLAN on Linux
+=========================================================================
+
+Note: This article describe a brief introduction to using VxLAN in
+      linux, not how to use octopi itself, and the server running the
+      octopi daemon must not configure this VxLAN.
+
+      There are various methods of VxLAN in Linux, as described
+      below. octopi extends the basic Multicast Method.
+ 
+=========================================================================
+
+* Multicast Method (basic method)
+
+  - In this scheme, BUM traffic is encapsulated in IP multicat.
+  - MAC address and lower layer IP address will be learned automatically
+    by ARP/v6ND
+  - Since this is the basic method, it can be used in the same way as
+    non-Linux VxLan devices.
+  - Generally, multicast routing is required to get past the router.
+  - octopid provides an alternative to multicast routing.
+
+# ip link add eth0.vx120 type vxlan id 120 group 239.0.0.120 \
+	dev eth0 dstport 4789 ttl 16 ageing 601
+# ip link set eth0.vx120 up
+
+  eth0.vx120          - VxLAN interface name
+  type vxlan          - Specify to create a VxLAN interface
+  id 120              - VxLAN-ID (VNI)
+  group 239.0.0.120   - Specify the multicast destination for BUM traffic
+  dev eth0            - Physical interface
+  dstport 4789        - UDP destination port for VxLAN (RFC default 4789)
+  ttl 16              - Maximum number of hops
+  ageing 601          - Number of seconds to be remembered in the kernel's
+                        internal routing database (FDB).
+
+  Other options:
+  srcport 4789        - Fix the UDP source port (basically unnecessary)
+  local 192.168.17.10 - Fix the local address (if there are multiple addresses)
+
+- Aging time should be increased to reduce the amount of ARP packets
+  (optional)
+
+# vi /etc/sysctl.conf
+	net.ipv4.neigh.default.gc_stale_time=480
+	net.ipv4.neigh.default.gc_thresh1=3
+	net.ipv4.neigh.default.gc_thresh2=3
+# sysctl -p
+
+
+=========================================================================
+
+* Direct Method (peer-to-peer method)
+
+  - Send all BUM traffic to a specific address.
+  - Similar to the multicast method, but BUM throws it to a specific
+    host by unicast. Assuming the host can handle it.
+  - A peer-to-peer tunnel with two hosts will work fine.
+
+# ip link add eth0.vx130 type vxlan id 130 remote 192.168.140.20 \
+	dev eth0 dstport 4789 ttl 16 ageing 601
+# ip link set eth0.vx130 up
+
+  remote 192.168.14.20  - Destination address for BUM traffic
+
+
+=========================================================================
+
+* Flooding Method (unicast method)
+
+  - BUM traffic is unicast to all registered hosts
+  - MAC address is learned automatically via ARP/v6ND, lower layer IP
+    is registered manually
+  - Without specifying group or remote option,  lower layer IPs is
+    manually register to kernel FDB.
+  - It is safer to turn off automatic learning by specifying "nolearning"
+  - Useful when the number of participating hosts is fixed and small.
+
+# ip link add eth0.vx140 type vxlan id 140 nolerning \
+	dev eth0 dstport 4789 ttl 16 ageing 601
+# ip link set eth0.vx140 up
+
+# bridge fdb append 00:00:00:00:00:00 dev eth0.vx140 192.168.33.12
+# bridge fdb append 00:00:00:00:00:00 dev eth0.vx140 192.168.33.13
+# bridge fdb append 00:00:00:00:00:00 dev eth0.vx140 192.168.33.14
+# bridge fdb append 00:00:00:00:00:00 dev eth0.vx140 192.168.33.15
+# ...
+
+  nolearning           - No automatic learning
+
+
+=========================================================================
+
+* Static Method
+
+  - Route all traffic to static and do not generate BUM traffic.
+  - Manually register all MACs and lower-layer IPs in advance.
+  - ARP also registers its neighbors statically and responded by Proxy-ARP.
+  - For Add or Remove a server, you need to change the configuration.
+
+# ip link add eth0.vx150 type vxlan id 150 dev eth0 nolearning proxy \
+	dstport 4789 ttl 16 ageing 601
+# ip link set eth0.vx150 up
+
+# bridge fdb append 77:88:99:aa:bb:c0 dev eth0.vx150 dst 192.168.33.13
+# bridge fdb append 77:88:99:aa:bb:c1 dev eth0.vx150 dst 192.168.33.13
+# bridge fdb append 77:88:99:aa:bb:c2 dev eth0.vx150 dst 192.168.33.14
+# ...
+
+# ip neigh add 10.22.7.13 lladdr 77:88:99:aa:bb:c0 dev eth0.vx150 nud reahcable
+# ip neigh add 10.22.7.18 lladdr 77:88:99:aa:bb:c1 dev eth0.vx150 nud reahcable
+# ip neigh add 10.22.8.51 lladdr 77:88:99:aa:bb:c2 dev eth0.vx150 nud reahcable
+# ...
+
+  nolearning           - No automatic learning
+  proxy                - Respond with proxy arp
+
+=========================================================================
+
+* Dynamic Method
+
+  - Basically the same configuration as the static method above, but
+    instead of statically submitting all routes in advance, routes are
+    submitted dynamically from outside.
+  - In short, You need a system to automate the bridge fdb and ip neigh.
+  - There are many ways to submit a route:
+    - For example, use Cumulus Quagga to exchange EVPN routes.
+    - For example, use Open vSWitch to submit routes using OpenFlow.
+
+# ip link add eth0.vx160 type vxlan id 160 dev eth0 nolearning proxy \
+	dstport 4789 ttl 16 ageing 601
+# ip link set eth0.vx160 up
+
+
+=========================================================================
+
+* Summary
+
+                MAC auto-learn  IP auto-learn   Required system
+Multicast       Yex             Yes             Multicast routing (*)
+Dicrect         Yes             Yes             BUM Traffic relay host
+Flooding        Yes             No              (managed manually)
+Static          No              No              (managed manually)
+Dynamic         No              No              route exchange system
+
+(*) octopid is used instead of multicast routing and acts as a
+    stealth BUM traffic relay host.
+
+  - The above multiple methods are for Linux, and not all methods are
+    available for normal network devices or appliance equipment
+
+=========================================================================

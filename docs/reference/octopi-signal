@@ -1,0 +1,23 @@
+
+== Reload signal
+
+  - There is no reload signal, so you need to stop/start when you
+    rewrite octopi.conf
+
+== Terminate signal
+
+  - If you just want to stop it for now, "pkill octopid".
+
+		parent (launcher)	child (snipper, dispatcher, ...)
+    SIGINT	terminate all	-->	terminate all
+    SIGTERM	terminate all	-->	terminate all
+
+
+== Debug signal
+
+  - The following three are for debugging and do not need to be used normally
+  
+		parent (launcher)	child (snipper, dispatcher, ...)
+    SIGHUP	restart child	-->	terminate
+    SIGUSR1	Start debug logging	Start debug logging
+    SIGUSR2	Stop debug logging	Stop debug logging

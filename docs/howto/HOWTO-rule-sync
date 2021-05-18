@@ -1,0 +1,166 @@
+=========================================================================
+        Automatic synchronization of octopi rules
+=========================================================================
+
+* Setting up the rule receiver (client)
+
+1. Changing the configuration
+
+  # vi /opt/octopi/etc/octopi.conf
+	listener_procs  	2	# Number of API receiving processes
+	sync_address		0.0.0.0	# Listening Address
+	sync_port		24789	# Listening Port
+
+  - When the listening address is set to 0.0.0.0, all IPv4 addresses
+    are listened to.
+  - If the waiting address is set to ::, all IPv4 and IPv6 addresses
+    will be listened to.    
+
+
+2. Configuring acl
+
+  # octopi acl add 192.168.10.10 allow	# Controller address
+  # octopi acl list
+
+
+=========================================================================
+
+* Setting up the rule source (controller)
+
+1. Changing the configuration
+
+# vi /opt/octopi/etc/octopi.conf
+
+        kicker_procs		1	# Number of kicker daemons
+	talker_procs		8	# Number of sync deamons
+	sync_port		24789	# Destination Port
+
+  - The following settings are also recommended if you want to use the
+    ontroller exclusively without packet processing.
+
+	snipper_procs		0
+	dispatcher_procs	0
+	caster_procs		0
+	logger_procs		0
+
+2. Initialize the synchronization queue
+
+  # octopi queue init
+
+
+3. Enable synchronization
+
+  # octopi queue enable
+
+
+4. Set the synchronization destination
+
+   Note: Do not specify yourself as the target node for synchronization.
+
+
+  # octopi backup add 192.168.200.10	# To synchronize all rules
+  # octopi backup list
+
+  # octopi node add 192.168.200.10	# Synchronize only relevant rules
+  # octopi node list
+
+  # octopi node add 192.168.200.10  10.51.77.6
+	# Sync via another address  
+	# Synchronize rules related to 192.168.200.10 to 10.51.77.6
+
+  # octopi node add 192.168.200.10  10.51.77.11  10.51.77.12
+	# Or if you have redundancy and multiple targets.
+
+
+=========================================================================
+
+* Multi-level synchronous
+
+- It can also be relayed in multiple level.
+
+   Source octopid  --+-> Intermediate octopid --+-> Worker octopid
+                     |                          +-> Worker octopid
+                     |                          +-> Worker octopid
+                     |                          +-> Worker octopid
+                     |
+		     +-> Intermediate octopid --+-> Worker octopid
+                                                +-> Worker octopid
+                                                +-> Worker octopid
+                                                +-> Worker octopid
+
+  - In this case, the "intermediate octopid" should be set for both
+    the client and controller.
+
+  - All rules must be synchronized as backup from the "source octopid"
+    to the "intermediate octopid".
+
+  - Be sure to keep the relay in the form of a tree so as not to
+    create a loop.
+
+=========================================================================
+
+* Manual synchronization in case of trouble, etc.
+
+  # octopi queue list			# Check the sync queue.
+  # octopi queue sync			# Kick all synchronization in queue
+
+  # octopi queue add 192.168.200.10	# Add the target to sync queue
+  # octopi queue sync 192.168.200.10	# synchronization only the target
+
+  # octopi queue delete 192.168.200.10	# Remove from sync queue
+
+  # octopi queue disable                # Stop synchronization
+  # octopi queue enable                 # Start synchronization
+  # octopi queue add all; octopi queue sync     # Force Sync All Rules.
+
+=========================================================================
+
+* If the synchronization queue is corrupted
+
+  - If the synchronization queue is damaged or the synchronization
+    becomes abnormal due to some failure,follow the steps below.
+
+
+1. Stop synchronization
+
+  # octopi queue disable
+
+
+2. If any processes are in sync, kill them.
+
+  # ps ax | grep octopi-talker
+  16145 ?        S      0:00 octopi-talker
+  # kill 16145
+
+
+3. Check the synchronization destination
+
+  # octopi node list
+  # octopi backup list
+
+
+4. Delete and recreate the sync queue
+
+  # rm /var/octopi/octopiqueue
+  # octopi queue init
+
+
+5. Restart synchronization
+
+  # octopi queue enable
+
+
+6. Settupt synchronization target (base on step 3)
+   (synchronization schedule for all rules will be added)
+
+  # ocotpi node add ...
+  # ocotpi node add ...
+  # ocotpi backup add ... 
+  ...
+
+
+7. Kick synchronization immediately (if necessary).
+
+  # ocotpi queue sync
+
+=========================================================================

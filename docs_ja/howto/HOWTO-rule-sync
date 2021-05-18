@@ -1,0 +1,135 @@
+=========================================================================
+    octopi ルールの自動同期
+=========================================================================
+○ ルールを受ける側(クライアント)の設定
+
+1. コンフィグの変更
+
+# vi /opt/octopi/etc/octopi.conf
+	listener_procs  	2		# API受信プロセス数
+	sync_address		0.0.0.0		# 待ち受けアドレス
+	sync_port		24789		# 待ち受けポート
+
+  - 待ち受けアドレスを 0.0.0.0 にすると IPv4 全アドレスで待ち受け
+  - 待ち受けアドレスを :: にすると IPv4 と IPv6 全アドレスで待ち受け
+
+2. acl の設定
+
+# octopi acl add 192.168.10.10 allow		# コントローラのアドレス
+# octopi acl list
+
+
+=========================================================================
+○ ルールを送る側(コントローラ)の設定
+
+1. コンフィグの変更
+
+# vi /opt/octopi/etc/octopi.conf
+	kicker_procs		1		# 同期開始を指示するデーモン数
+	talker_procs		8		# 同時に同期できる数
+	sync_port		24789		# 宛先ポート
+
+  - パケット処理をせず、コントローラー専用に使うなら以下の設定も推奨
+	snipper_procs		0
+	dispatcher_procs	0
+	caster_procs		0
+	logger_procs		0
+
+2. 同期キューの初期化
+
+# octopi queue init
+
+
+3. 同期有効化
+
+# octopi queue enable
+
+
+4. 同期先の設定
+
+  - 注意: 同期対象ノードに自分自身を指定しないこと
+
+# octopi backup add 192.168.200.10		# 全ルールを同期する場合
+# octopi backup list
+
+# octopi node add 192.168.200.10		# 関連するルールのみを同期
+# octopi node list
+
+# octopi node add 192.168.200.10  10.51.77.6	# 別のアドレス経由で同期
+	# 192.168.200.10 に関連するルールを 10.51.77.6 に同期する
+	# 裏面のネットワーク経由で同期したい場合とか
+
+# octopi node add 192.168.200.10  10.51.77.11  10.51.77.12
+	# 冗長化されており、対象が複数台ある場合とか
+
+=========================================================================
+○ 多段中継
+
+- 以下のように多段で中継することもできる
+
+    配布元 octopid ー+-> 中間 octopid ー+-> 末端 octopid
+                     |                  +-> 末端 octopid
+                     |                  +-> 末端 octopid		     
+                     |                  +-> 末端 octopid
+                     |
+		     +-> 中間 octopid ー+-> 末端 octopid
+                                        +-> 末端 octopid
+                                        +-> 末端 octopid
+                                        +-> 末端 octopid					
+- この場合「中間 octopid」にはクライアントとコントローラの両方の設定をする
+
+- 「配布元 octopid」から「中間 octopid」へは必ず backup として
+   全てのルールの同期を行なうこと
+
+- 中継は必ずツリー状にしてループを作らないように注意、
+
+=========================================================================
+○ 障害時などにおける手動同期
+
+# octopi queue list				# 同期キューの内容を確認
+# octopi queue sync				# キューの同期を実行
+
+# octopi queue add 192.168.200.10		# 対象を再同期予定に追加
+# octopi queue sync 192.168.200.10		# 対象のみ同期を実行
+
+# octopi queue delete 192.168.200.10		# 同期キューから削除
+
+# octopi queue disable                          # 同期機能を停止
+# octopi queue enable                           # 同期機能を再開
+# octopi queue add all; octopi queue sync       # 全ノードに強制同期
+
+=========================================================================
+○同期キューが破損した場合
+
+- 何らかの障害で同期キューが破損したり、同期が異常になった場合は以下の
+  手順を実施するると良い。
+
+1. 同期の停止
+  # octopi queue disable
+
+2. 同期中のプロセスがいれば殺す
+  # ps ax | grep octopi-talker
+  16145 ?        S      0:00 octopi-talker
+  # kill 16145
+
+3. 同期先の確認
+  # octopi node list
+  # octopi backup list
+
+4. 同期キューを削除して再作成
+  # rm /var/octopi/octopiqueue
+  # octopi queue init
+
+5. 同期の再開
+  # octopi queue enable
+
+6. 同期先の再投入 (全ルールの同期予定も追加される)
+  # ocotpi node add ...
+  # ocotpi node add ...
+  # ocotpi backup add ... 
+  ...
+
+7. (必要なら)ただちに同期開始
+  # ocotpi queue sync
+
+=========================================================================

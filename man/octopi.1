@@ -1,0 +1,245 @@
+.\"
+.\"
+.TH OCTOPI "1" "Septemper 2020"
+.SH NAME
+octopi - rule setting command for VxLAN extender daemon
+
+.SH SYNOPSIS
+.B octopi
+[options...] command [parameters...]
+
+.SH DESCRIPTION
+.PP
+This command defines and edit the rule database for octopi daemon\&.
+.PP
+See the documentation
+.B octopi(8)
+for ocotpi daemon\&.
+.PP
+.SH OPTIONS
+.TP
+.B \-h
+show help and exit\&.
+.TP
+.B \-v
+show version and exit\&.
+.TP
+.B \-c " path"
+specify config file path\&. (default: /opt/octopi/etc/octopi.conf)
+.TP
+.B \-D " path"
+specify the rule database path\&. (default: /var/octopi/octopidb)
+.TP
+.B \-Q " path"
+specify rule sync queue path\&. (default: /var/octopi/octopiqueue)
+.TP
+.B \-S " number"
+specify maximum number of parallel synchronization\&. (default: 8)
+.TP
+.B \-d
+debug mode\&.
+.TP
+.B \-n
+dry run mode\&.
+.TP
+.B \-q
+quiet mode.
+.TP
+.B \-f
+foreground mode\&. (output is line bufferd)\&.
+
+.SH RULE COMMANDS
+.TP
+.B octopi [rule] init [pool_size  [hash_size]]
+Initialize octopi rule database\&.
+.TP
+.B octopi [rule] list [vni [protocol]]
+Show rule database as command list\&\&.
+.TP
+.B octopi [rule] show [vni [protocol]]
+Show rule database structures as longest prefix match trees\&.
+.TP
+.B octopi [rule] find vni (address | protocol)
+Lookup database and show relay destination\&.
+If a protocol is specified instead of an address\&,
+the broadcast destinations are displayed\&.
+.TP
+.B octopi [rule] add vni target relay [relay...]
+Add new rule to the database\&.
+.TP
+.B octopi [rule] delete vni target [relay...]
+Delete rule from the database\&.
+If the relay is ommited, delete all relays\&.
+.TP
+.B octopi [rule] move vni target relay [relay...]
+Change rule in database.
+This command is same as delete then add, but do atomic timing\&.
+.TP
+.B octopi [rule] flush vni [proto]
+Delete all trees from the database\&.
+.TP
+.B octopi [rule] save [vni [protocol]]
+Write rules to standard output as save data format\&.
+
+.RS 6
+ rule vni
+ target relay [relay...]
+ ...
+ (commit | abort)
+.RS -6
+.TP
+.B octopi [rule] update [protocol]
+Read save data from standard input and update the database\&.
+.TP
+.B octopi [rule] restore [protocol]
+Read save data from standard input and replace the database\&.
+This command is same as flush then update, but do atomic timing\&.
+
+.SH SYNCHRONIZATION ACCESS CONTROL COMMANDS
+.TP
+.B octopi acl list [protocol]
+Show ACL for synchronization parents as command list\&.
+.TP
+.B octopi acl add target action
+Add ACL for synchronization parents\&.
+.TP
+.B octopi acl delete target action
+Delete ACL for synchronization parents\&.
+
+.SH SYNCHRONIZATION NODE COMMANDS
+.TP
+.B octopi backup list
+Show backup node members as command list\&.
+.TP
+.B octopi backup add member [member ...]
+Add backup node members nodes\&.
+.TP
+.B octopi backup delete [member ...]
+Delete backup node members nodes\&.
+If the member is ommited, delete all backup members\&.
+.TP
+.B octopi node list [relay ...]
+Show synchronization nodes as command list\&.
+.TP
+.B octopi node add relay [member ...]
+Add synchronization node members\&.
+If the member is omitted, the same address as in relay is used\&.
+.TP
+.B octopi node delete relay [member ...]
+Delete synchronization node members\&.
+If the member is ommited, delete all members of relay\&.
+
+.SH SYNCHRONIZATION QUEUE COMMANDS
+.TP
+.B octopi queue init [pool_size [hash_size]]
+Initialize octopi synchronization queue\&.
+.TP
+.B octopi queue list [relay ...]
+Show synchronization queue\&.
+.TP
+.B octopi queue show [relay ...]
+Show synchronization nodes and queue structures\&.
+.TP
+.B octopi queue add [utype] node [vni]
+Manually add synchronization schedules\&.
+.TP
+.B octopi queue delete [utype] node [vni]
+Manually delete synchronization schedules\&.
+.TP
+.B octopi queue sync [[utype] node]
+Same as \fBoctopi sync\fP, see below\&.
+
+.SH ADMINISTRATION COMMANDS
+.TP
+.B octopi [rule] sync
+Store rules on memory to the disk\&.
+And start one-shot rule synchronization now\&.
+If the node is ommited, synchronize all queued\&.
+.TP
+.B octopi [rule] pause
+Set pause flags\&. The flag disable all rule temporarily\&.
+.TP
+.B octopi [rule] unpause
+Unset pause flags\&. Enabling all rule again.
+.TP
+.B octopi [rule] fsck [normal | all]
+Repair broken database file\&.
+.TP
+.B octopi [rule] dump [header | all]
+Dump database for debugging\&.
+.TP
+.B octopi queue disable
+Set queue disable flag, It disable synchronizing functions\&.
+.TP
+.B octopi queue enable
+Unset queue disable flag. Enable synchronizing functions again\&.
+.TP
+.B octopi queue dump [header | all]
+Dump synchronization queue for debugging\&.
+
+.SH PARAMETERS
+.TP
+vni      :=  "all" | number | "any"
+.br
+specify Virtual Network Identifier (also known as VxLAN-ID).
+\fB "all"\fP means all VNI rules\&. \fB "any"\fP means fallback rule\&.
+.TP
+address  :=  IPv4 Address | IPv6 Address
+.TP
+target   :=  address/mask | "default" | "default6"
+.br
+\fB "default"\fP match all IPv4, same as 0.0.0.0/0\&.
+.br
+\fB "default6"\fP match all IPv6, same as "::/0"\&.
+.TP
+relay    :=  addr | "drop" | "broadcast"
+.br
+specify relay target octopi daemon\&.
+If the relay destination includes \fB "drop"\fP ,
+the entire destination is disabled\&.
+If the relay destination includes \fB "broadcast"\fP ,
+relaying to broadcast destinations.
+
+.TP
+protocol :=  "ipv4" | "ipv6" | "all"
+specify network protocol\&. \fB "all"\fP means both IPv4 and IPv6\&.
+
+.TP
+action   := "allow" | "deny"
+.br
+specify ACL action.
+
+.TP
+utype    := "auto" | "relay" | "member" | "both"
+.br
+specify node address type\&. If it is \fB "auto"\fP or ommited,
+search for "relay" first\&. then if none, look for "member"\&.
+
+.TP
+node     := "all" | "backup" | address
+.br
+specify synchronization node address\&.
+It is determined by the \fB utype\fP
+to be a relay address or a member address\&.
+
+.SH FILES
+.PP
+.B /opt/octopi/etc/octopi.conf
+configuration file\&. See octopi.conf(8)\&.
+.PP
+/var/octopi/octopidb
+.B octopi rule database\&.
+.PP
+.B /var/octopi/octopiqueue
+octopi sync queue\&. See octopi(1)\&.
+
+.SH AUTHOR
+HANATAKA Shinya
+
+.SH COPYRIGHT
+Copyright \(co 2019 Internet Initiative Japan Inc\&.
+.br
+Copyright \(co 2019-2020 HANATAKA Shinya\&.
+
+.SH "SEE ALSO"
+octopid(8), octopi.conf(8)

@@ -1,0 +1,80 @@
+[Capsule]
+the outer dst mac is not multicast
+	-> DROP
+
+the outer ether type is not IPv4 or IPv6
+	-> DROP
+
+the outer dst IP is not in the multicast range specified in config
+	-> DROP
+
+The outer IP protocol is not UDP.
+	-> DROP
+
+the outer UDP port is not the specified one (4789)
+	-> DROP
+
+the outer UDP data dose not start with VxLAN header
+	-> DROP
+
+the inner ether type is not ARP, IPv4, or IPv6
+	-> DROP
+
+
+[ARP]
+the arp_hw_type is not ETHER
+	-> DROP
+
+arp_proto_type is not IP
+	-> DROP
+
+arp_hw_len is not 6
+	-> DROP
+
+arp_proto_len is not 4
+	-> DROP
+
+arp_op is neither request nor response
+	-> FLOOD
+
+sender_ip and target_ip are equal (Gratuitous ARP)
+	-> FLOOD
+
+arp_op is request and sender_ip is 0 (Duplicate Address Detection)
+	-> FLOOD
+
+arp_op is request
+	-> SWITCH (target_ip)
+
+other than that
+	-> DROP
+
+
+[IPv4]
+any (unknown unicast)
+	-> SWITCH (dst ip4)
+
+
+[IPv6]
+The next header is not ICMPV6 (unknown unicast)
+	-> SWITCH (dst ip6)
+
+icmp Type is not 135, 136
+	-> SWITCH (dst ip6)
+
+icmp code is not 0
+	-> SWITCH (dst ip6)
+
+Type 136 (Advertisement), solicited flag is 0, dst ipv6 is 0,
+and FF00::/8 (Unsolicited Advertisement).
+	-> FLOOD
+
+Type 135 (Solicitation) and src ip is unspecified (::)
+(Duplicate Address Detection).
+	-> FLOOD
+
+Type 135 (Solicitation)
+	-> SWITCH (target address)
+
+Other (unknown unicast)
+	-> SWITCH (dst ip6)

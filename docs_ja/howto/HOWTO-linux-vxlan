@@ -1,0 +1,143 @@
+=========================================================================
+Linux で VxLAN を使用する方法
+=========================================================================
+
+注意: この文章には linux で VxLAN を使用する方法の簡単の紹介しています。
+      octopi そのものの使い方ではありません。octopi デーモンを実行する
+      サーバではこの VxLAN の設定は行ないません。
+
+      Linux の VxLAN には以下で説明するように様々な方式が存在しています。
+      octopid このうち、基本のマルチキャスト方式を拡張します。
+
+=========================================================================
+○マルチキャスト方式 (基本方式)
+
+- BUMトラフィックを IP マルチキャストする
+- MACアドレスおよび下層IPアドレスは ARP/v6ND を通して自動学習する
+- 基本方式なので Linux 以外の VxLan 機器と同じ方法
+- 一般にルーターを超えるにはマルチキャスト・ルーティングが必要になる
+- octopid を使用する場合にはこの設定にする
+
+# ip link add eth0.vx120 type vxlan id 120 group 239.0.0.120 \
+	dev eth0 dstport 4789 ttl 16 ageing 601
+# ip link set eth0.vx120 up
+
+  eth0.vx120          → 任意のインターフェイス名、わかり易くつけること
+  type vxlan          → VxLAN インターフェイスの作成を指定
+  id 120              → VxLAN-ID (VNI) を指定
+  group 239.0.0.120   → BUMトラフィック用のマルチキャスト宛先を指定
+  dev eth0            → 親となるインタフェース
+  dstport 4789        → VxLAN用の UDP destination port (RFC/IANA標準は 4789)
+  ttl 16              → 最大ホップ数
+  ageing 601          → カーネル内部経路(FDB)に覚えておく秒数
+
+  その他
+  srcport 4789        → UDP source port を固定する(基本不要)
+  local 192.168.17.10 → ローカルアドレスを固定する(複数アドレスがある時)
+
+- ARP パケットの量を減らずため Aging 時間を述ばすと良い(選択)
+
+# vi /etc/sysctl.conf
+	net.ipv4.neigh.default.gc_stale_time=480
+	net.ipv4.neigh.default.gc_thresh1=3
+	net.ipv4.neigh.default.gc_thresh2=3
+# sysctl -p
+
+
+=========================================================================
+○ダイレクト方式
+
+- BUMトラフィックは全て特定のホストに投げる
+- マルチキャスト方式に似ているが、BUM は特定のホストに丸投げする
+     - そのホストが何とかしてくれる前提
+- ホスト2台の peer to peer のトンネルならば、そのままいける
+- 設定は group を指定するかわりに remote を指定する
+
+# ip link add eth0.vx130 type vxlan id 130 remote 192.168.140.20 \
+	dev eth0 dstport 4789 ttl 16 ageing 601
+# ip link set eth0.vx130 up
+
+  remote 192.168.14.20 → BUMトラフィックの送信先
+
+
+=========================================================================
+○フラッディング方式 (ユニキャスト方式)
+
+- BUMトラフィックをユニキャストで指定したホスト全てに投げる
+- MAC は ARP/v6ND を通して自動学習する、下層IP は手動で登録する
+- 参加するホストが固定で数が少ない場合
+- group も remote も指定せず、bridge dfb に下層IPを手動登録する
+- nolearning を指定して自動学習を off にした方が安全
+
+# ip link add eth0.vx140 type vxlan id 140 nolerning \
+	dev eth0 dstport 4789 ttl 16 ageing 601
+# ip link set eth0.vx140 up
+
+# bridge fdb append 00:00:00:00:00:00 dev eth0.vx140 192.168.33.12
+# bridge fdb append 00:00:00:00:00:00 dev eth0.vx140 192.168.33.13
+# bridge fdb append 00:00:00:00:00:00 dev eth0.vx140 192.168.33.14
+# bridge fdb append 00:00:00:00:00:00 dev eth0.vx140 192.168.33.15
+# ...
+
+  nolearning           → 自動学習をしない
+
+
+=========================================================================
+○スタティック方式
+
+- 最初から全てスタッティクに経路設定し BUM トラフィックを発生させない
+- 全ての MAC と下層IP を事前に手動登録しておく
+- ARP も近隣をスタティック登録しておき proxy arp によりに自己応答する
+- サーバの追加削除の度に設定を変更する必要があり不便
+- 上記のフラッディング・モートとの組み合わせも可能
+
+# ip link add eth0.vx150 type vxlan id 150 dev eth0 nolearning proxy \
+	dstport 4789 ttl 16 ageing 601
+# ip link set eth0.vx150 up
+
+# bridge fdb append 77:88:99:aa:bb:c0 dev eth0.vx150 dst 192.168.33.13
+# bridge fdb append 77:88:99:aa:bb:c1 dev eth0.vx150 dst 192.168.33.13
+# bridge fdb append 77:88:99:aa:bb:c2 dev eth0.vx150 dst 192.168.33.14
+# ...
+
+# ip neigh add 10.22.7.13 lladdr 77:88:99:aa:bb:c0 dev eth0.vx150 nud reahcable
+# ip neigh add 10.22.7.18 lladdr 77:88:99:aa:bb:c1 dev eth0.vx150 nud reahcable
+# ip neigh add 10.22.8.51 lladdr 77:88:99:aa:bb:c2 dev eth0.vx150 nud reahcable
+# ...
+
+  nolearning           → 自動学習をしない
+  proxy                → proxy arp を行なう
+
+
+=========================================================================
+○ダイナミックモード
+
+- 基本的に上記のスタティック方式と同じ設定だが、予め静的に全ての経路
+  を投入しておくかわりに、外部からダイナミックに経路を投入する
+- 要は bridge fdb と ip neigh の部分を自動化するシステムが必要
+- 経路を投入する方法は様々
+    - 例えば Cumulus Quagga とかを使って EVPN 経路交換とか
+    - 例えば Open vSWitch とかを使って OpenFlow による経路投入とか
+
+# ip link add eth0.vx160 type vxlan id 160 dev eth0 nolearning proxy \
+	dstport 4789 ttl 16 ageing 601
+# ip link set eth0.vx160 up
+
+
+=========================================================================
+○まとめ
+
+                  MAC自動学習  IP自動学習    必要システム
+マルチキャスト    ○           ○            マルチキャスト・ルーティング(*)
+ダイレクト        ○           ○            BUM トラッフィク中継ホスト
+フラッディング    ○           ×            不要 (事前に静的に設定)
+スタティック      ×           ×            不要 (事前に静的に設定)
+ダイナミック      ×           ×            経路設定システム
+
+(*) octopid はマルチキャスト・ルーティングのかわりに使用し、ステルスな
+    分散型 BUM トラフィック中継ホストとして機能する
+
+- 上記の複数の方式が Linux の場合であり、通常のネットワーク・デバイスや
+  アプライアンス機材では全ての方法が利用できるわけではない。
+
+=========================================================================

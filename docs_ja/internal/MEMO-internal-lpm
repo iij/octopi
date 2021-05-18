@@ -1,0 +1,310 @@
+-----------------------------------------------------------------------------
+○ルール・ファイル構造
+
+ヘッダー               256 bytes   
+  マジック               8 bytes   固定 (4f 43 54 4f 50 49 44 42)
+  メジャー・バージョン   4 bytes   1  
+  マイナー・バージョン   4 bytes   2
+  ノードのサイズ         4 bytes   64
+  ノード番号のサイズ     4 bytes   4
+  ヘッダーのサイズ       4 bytes   256
+  プール数               4 bytes   可変
+  ハッシュ数             4 bytes   可変
+  データ部分のサイズ     4 bytes   
+  ファイル全体のサイズ   4 bytes
+  プール先頭             4 bytes   (node position)
+  プール末尾             4 bytes   (node position)
+  停止フラグ             1 byte    (0:処理 1:停止)
+  同期キューフラグ       1 byte    (0:無効 1:有効)
+  予約                   残り
+
+ノード                  64 byte * プール数
+   type                  1 byte  0:None 1:Root 2:Node 3:Relay 255:Base
+   proto                 1 byte  1:IPv4 2:IPv6 3:all
+   mask                  1 byte
+   forkbit               1 byte
+   mark                  4 bytes
+   予約                 24 bytes
+   next                  4 bytes  (node position)
+   relay                 4 bytes  (node position)
+   child[0]              4 bytes  (node position)
+   child[1]              4 bytes  (node position)
+   addr                 16 bytes IPv4 or IPv6 or VNI
+
+ハッシュ                 4 bytes * ハッシュ数
+   num                   4 bytes  (node position)
+
+-----------------------------------------------------------------------------
+[プール]
+- 未使用のノードの queue
+- 新規は pool_head から取り出し、使用済みは pool_tail に戻す
+
+  pool_head                          pool_tail
+           \                                  \
+            node=node=node=node=node=node=node=node
+
+
+[ハッシュ]
+
+  (vni hash)
+            \
+             root(v6)
+            \
+             root(v4) - root(v4) - root(v6)
+            \
+             root(v4)
+
+
+[ルール・ツリー]
+
+- 分岐(fork)ノードは自動生成される
+- 複合(combined)ノードは単純(simple)と分岐(fork)の両方を兼ねる
+  
+
+                                             +- leaf
+                                             |
+             +- simple -- leaf   +- fork ----+
+	     |                   |           +- simple - leaf
+             |                   |
+ root - fork-+          +- fork--+           +- simple - simple - leaf
+             |          |        |           |
+             +- combind-+        +- combined +        +- leaf
+                        |                    |        |
+		        +- leaf              +- fork -+
+			                              |
+                                                      +- leaf
+
+
+-----------------------------------------------------------------------------
+○Longest Prefix Match 検索木データ構造
+
+- next は pool 用で書き換えロジックのみがアクセスする
+
+- mark は各種の一時的な作業マーク
+	1: ツリー更新作業中マーク(update)
+	2: リレー更新先作業中マーク(relay)
+	4: restoreにおける未更新マーク(restore)
+	8: fsckにおける未使用マーク(used)
+
+- child[0] 左の枝
+- child[1] 右の枝
+- relay    転送先の枝
+
+LPM_BASE       = 255,
+	- 基礎ノード
+	- 必ず ID=0 を持ち、どこからも参照されない、プールにも入らない
+	child[0]: IPv4 wild card root
+	child[1]: IPv6 wild card root
+
+LPM_NONE       = 0,
+	- 未使用ノード
+	- まだ一度も使用されていない状態
+	data     : 0
+	mask     : 0
+	child[0] : 0
+	child[1] : 0
+
+LPM_ROOT       = 1,
+	- 根ノード
+	- 自動挿入される
+	data     : vxid
+	mask     : 0
+        forkbit  : 0
+	child[0] : ツリー
+        child[1] : 次の根
+        relay    : ブロードキャストリスト
+
+LPM_NODE       = 2,
+	- 節ノード
+	- 以下の葉ノード、単純ノード、複合ノード、分岐ノードの種類がある
+	data     : addr
+	mask     : mask
+        forkbit  : forkbit or 0
+	child[0] : ツリー or 0
+        child[1] : ツリー or 0
+	relay    : 転送先リスト or 0
+
+  leaf node (葉ノード)
+	- 子供0、relay有
+	data     : addr
+	mask     : mask
+        forkbit  : 0
+	child[0] : 0
+        child[1] : 0
+	relay    : 転送先リスト
+
+  simple node (単純ノード)
+	- 子供1つ、relay有
+	data     : addr
+	mask     : mask
+        forkbit  : 0
+	child[0] : 子ツリー
+        child[1] : 0
+	relay    : 転送先リスト
+
+  fork node (分岐ノード)
+	- 子供2つ、relay無し
+	- 自動挿入される
+	data     : addr
+	mask     : forkbit-1
+        forkbit  : forkbit
+	child[0] : bit 0 子ツリー
+        child[1] : bit 1 子ツリー
+	relay    : 0
+
+  combined node (複合ノード)
+	- 子供2つ、relay有り
+	data     : addr
+	mask     : mask
+        forkbit  : forkbit
+	child[0] : bit 0 子ツリー
+        child[1] : bit 1 子ツリー
+	relay    : 転送先リスト
+
+LPM_RELAY       = 3,
+	- リレーノード
+	data     : 転送先アドレス
+	mask     : 0
+	forkbit  : 0
+	child[0] : 0
+        child[1] : 0
+	relay    : 次の転送先リスト
+
+
+-----------------------------------------------------------------------------
+○検索アルゴリズム
+
+1. ハッシュの確認
+  a. VxID ハッシュを計算する
+  b. ハッシュ表を確認する
+  c. ハッシュ表が 0 ならば検索失敗
+  d. ハッシュ表が示す根へ
+
+2. 根の検索
+  a. proto と vxid が一致すればツリー(child0)へ
+  b. 一致しなければ次の根(child1)へ
+  c. 次の根が 0 ならば検索失敗
+
+3. 節
+  a. addr/mask に含まれていなければ検索終了
+  b. relay が 0 でなければ relay を保存
+  c. forkbit が 0 ならば child0 のツリーを辿る(分岐なし)
+  d. child0 が 0 ならば検索終了
+  e. forkbit が 0 でなければ対応する(forkbit-1の位置の) bit を取り出す
+  f. そのbit が 0 ならば child0, 1 ならば child1 のツリーを辿る
+
+4. 検索終了
+  a. 検索終了時に relay が 0 でなければ検索成功
+  b. 検索終了時に relay が 0 ならば検索失敗
+
+
+-----------------------------------------------------------------------------
+○圧縮
+
+単純ノード(子供1つのみ)に、分岐ノードを吸収させる
+  - 単純ノードの下に分岐ノードの挿入を分岐ビットで代替
+  - もしくは分岐ノードの親に単純ノードが挿入された時に置き換える
+
+-----------------------------------------------------------------------------
+○追加アルゴリズムの分類
+
+
+  N: new node
+  s: simple node
+  f: fork node
+  m: combined node
+  l: leaf node
+  c: child list
+
+  -  大文字は対象ノードを意味する
+
+
+a) 対象の転送先に追加
+
+add_relay()
+
+b) 対象の子供として葉ノードを追加。必要に応じて親を複合ノードに変更
+
+add_leaf()
+   -S           ->    -S-N
+
+   -S-c         ->    -M-c
+                        `N
+
+c) 分岐ノードを挿入して、対象の隣に葉ノードとして追加
+
+add_fork()
+   -f-c         ->    -f-c
+     `C                 `F-C
+                          `N
+
+d) 対象と子供の間に単純ノードとして挿入
+
+insert_node()
+   -S-c         ->    -S-N-c
+
+   -F-c         ->    -F-c
+     `c                 `N-c
+
+
+e) 対象の複合ノードを内部分離して、複合ノードとして挿入
+insert_mixed()
+
+-M-c         ->    -S-N-c
+     `c                   `c
+
+
+f) 対象の分岐ノードを複合ノードに変更
+
+update_node()
+   -F-c         ->    -M-c
+     `c                 `c
+
+
+h) 対象の子供を新しい分岐ノード以下に移動し、葉ノードとして追加
+
+break_fork()
+   -F-c         ->    -F--f-c
+     `c                 `N `c
+
+-----------------------------------------------------------------------------
+○削除アルゴリズムの分類
+
+a) 対象の転送先から削除
+
+del_relay()
+
+
+b) 葉ノードを削除、必要ならば親の削除や種別変更を行う
+
+del_leaf()
+   root-C       ->     ()           根ノードごと削除
+
+   -s-C         ->    -s            通常の葉ノードの削除
+
+   -f-C         ->    -c            親の分岐ノードを一緒に削除
+     `c              
+
+   -m-C         ->    -s-c          親の複合ノードを単純ノードに変更
+     `c
+
+   -m--f-c      ->    -m-c          親の複合ノードを分離し、再圧縮
+     `C `c              `c
+
+
+c) 中間の単純ノードを削除
+
+del_node()
+   -S-c         ->     -c
+
+
+d) 複合ノードを削除し分岐ノードに変更、必要なら再圧縮を行う
+
+del_mixed()
+   -M-c         ->    -f-c
+     `c                 `c
+
+   -s-M-c       ->    -m-c
+       `c               `c
+
+-----------------------------------------------------------------------------

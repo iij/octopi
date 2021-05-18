@@ -1,0 +1,318 @@
+-----------------------------------------------------------------------------
+* Rule file structure
+
+header                 256 bytes   
+  Magic                  8 bytes   fixed string (4f 43 54 4f 50 49 44 42)
+  Major version          4 bytes   1
+  Minor version          4 bytes   2
+  node size              4 bytes   64
+  node number size       4 bytes   4
+  header size            4 bytes   256
+  pool size              4 bytes   variable
+  hash size              4 bytes   variable
+  data area size         4 bytes
+  total file size        4 bytes
+  pool head              4 bytes   (node position)
+  pool tail              4 bytes   (node position)
+  rule suspend flag      1 byte    (0:normal  1:suspedn)
+  queue enable flag      1 byte    (0:disable 1:enable)
+  reserved               all lefts
+
+Node                   64 byte * pool size
+   type                  1 byte  0:None 1:Root 2:Node 3:Relay 255:Base
+   proto                 1 byte  1:IPv4 2:IPv6 3:all
+   mask                  1 byte
+   forkbit               1 byte
+   mark                  4 bytes
+   reserved             24 bytes
+   next                  4 bytes  (node position)
+   relay                 4 bytes  (node position)
+   child[0]              4 bytes  (node position)
+   child[1]              4 bytes  (node position)
+   addr                 16 bytes IPv4 or IPv6 or VNI
+
+Hash                     4 bytes * hash size
+   num                   4 bytes  (node position)
+
+-----------------------------------------------------------------------------
+[Pool]
+- queue for unused nodes
+- New items are taken out of pool_head and deleted items are returned
+  to pool_tail
+
+  pool_head                          pool_tail
+           \                                  \
+            node=node=node=node=node=node=node=node
+
+
+[Hash]
+
+  (vni hash)
+            \
+             root(v6)
+            \
+             root(v4) - root(v4) - root(v6)
+            \
+             root(v4)
+
+
+[Rule Tree]
+
+- The fork node is automatically generated.
+- A combined node can be both simple and forked.
+  
+
+                                              +- leaf
+                                              |
+             +- simple -- leaf    +- fork ----+
+	     |                    |           +- simple - leaf
+             |                    |
+ root - fork-+           +- fork--+           +- simple - simple - leaf
+             |           |        |           |
+             +- combined-+        +- combined +        +- leaf
+                         |                    |        |
+		         +- leaf              +- fork -+
+			                               |
+                                                       +- leaf
+
+
+-----------------------------------------------------------------------------
+* Longest Prefix Match Search Tree Data Structure
+
+- next is for pool, accessed only by rewriting logic
+
+- mark is a temporary work mark for each type
+	1: Tree update in progress (update)
+	2: Relay update destination work in progress mark (relay)
+	4: Unchanged mark in restore (restore)
+	8: Unused mark in fsck (used)
+
+- child[0] left branch
+- child[1] right branch
+- relay    relay list
+
+LPM_BASE       = 255,
+	- base node
+	- must have ID=0, not referenced from anywhere, and not in a pool
+	child[0]: IPv4 wild card root
+	child[1]: IPv6 wild card root
+
+LPM_NONE       = 0,
+	- unused node
+	- that has never been used
+	data     : 0
+	mask     : 0
+	child[0] : 0
+	child[1] : 0
+
+LPM_ROOT       = 1,
+	- root node
+	- automatically inserted
+	data     : vxid
+	mask     : 0
+        forkbit  : 0
+	child[0] : tree
+        child[1] : next root
+        relay    : broadcast list
+
+LPM_NODE       = 2,
+
+- clause node
+	- there are the following types of leaf nodes, simple nodes,
+	  combined nodes, and fork nodes.
+	data     : addr
+	mask     : mask
+        forkbit  : forkbit or 0
+	child[0] : tree or 0
+        child[1] : tree or 0
+	relay    : relay list or 0
+
+  leaf node
+	- child 0, with relay
+	data     : addr
+	mask     : mask
+        forkbit  : 0
+	child[0] : 0
+        child[1] : 0
+	relay    : relay list
+
+  simple node
+	- child 1, with relay
+	data     : addr
+	mask     : mask
+        forkbit  : 0
+	child[0] : child tree
+        child[1] : 0
+	relay    : relay list
+
+  fork node
+	- child 2, without relay
+	- automatically inserted
+	data     : addr
+	mask     : forkbit-1
+        forkbit  : forkbit
+	child[0] : bit 0 child tree
+        child[1] : bit 1 child tree
+	relay    : 0
+
+  combined node
+	- child 2, with relay
+	data     : addr
+	mask     : mask
+        forkbit  : forkbit
+	child[0] : bit 0 child tree
+        child[1] : bit 1 child tree
+	relay    : relay list
+
+LPM_RELAY       = 3,
+	- relay node
+	data     : relay list
+	mask     : 0
+	forkbit  : 0
+	child[0] : 0
+        child[1] : 0
+	relay    : next relay
+
+
+-----------------------------------------------------------------------------
+* search algorithm
+
+1. Checking the hash
+  a. Compute the VxID hash
+  b. Check the hash table.
+  c. If the hash table is 0, the search fails.
+  d. To the root indicated by the hash table
+
+2. Search roots
+  a. If proto and vxid match, go to tree (child0)
+  b. If no match, go to the next root (child1)
+  c. If the next root is 0, the search fails.
+
+3. Serch nodes
+  a. If it is not included in addr/mask, go to End of Search
+  b. If relay is not 0, save relay
+  c. If forkbit is 0, traverse the tree of child0 (no branching)
+  d. If child0 is 0, go to End of Search
+  e. If forkbit is not 0, extract the corresponding bit (at pos. forkbit-1).
+  f. If the bit is 0, traverse the tree of child0, if 1, traverse the tree
+     of child1
+
+4. End of Search
+  a. If relay is not 0 at the end of search, search succeeded.
+  b. If relay is 0 at the end of the search, the search fails.
+
+
+-----------------------------------------------------------------------------
+* Combined
+
+Let a simple node (with only one child) absorb a branching node.
+  - Substitute branching bit for insertion of branch node under simple node
+  - Or replace a branch node when a simple node is inserted into its parent
+
+-----------------------------------------------------------------------------
+* Appendig algorithm patterns
+
+  N: new node
+  s: simple node
+  f: fork node
+  m: combined node
+  l: leaf node
+  c: child list
+
+  -  capital letter means the target.
+
+
+a) Add to the target relay address
+
+add_relay()
+
+
+b) Add a leaf node as a child of the target. Change the parent to
+   a combined node if necessary.
+
+add_leaf()
+   -L           ->    -S-N
+
+   -S-c         ->    -M-c
+                        `N
+
+c) Insert a fork node and add the new as a leaf node as sibling of the target
+
+add_fork()
+   -f-c         ->    -f-c
+     `C                 `F-C
+                          `N
+
+d) Insert as a simple node between the target and its child
+
+insert_node()
+   -S-c         ->    -S-N-c
+
+   -F-c         ->    -F-c
+     `c                 `N-c
+
+
+e) Internal separation of the target combined node and insertion
+   as a new combined node
+
+insert_mixed()
+   -M-c         ->    -S-N-c
+     `c                   `c
+
+
+f) Change the target fork node to a combined node
+
+update_node()
+   -F-c         ->    -N-c
+     `c                 `c
+
+
+h) Move the childs of target under the new fork node and add the new
+   as a leaf node
+
+break_fork()
+   -F-c         ->    -F--f-c
+     `c                 `N `c
+
+-----------------------------------------------------------------------------
+* Deteting algorithm patterns
+
+
+a) Delete from the target relay address
+
+del_relay()
+
+
+b) Delete leaf nodes, delete or change the type of parent if necessary
+
+del_leaf()
+   root-C       ->     ()           Delete entire root node
+
+   -s-C         ->    -s            Deleting normal leaf nodes
+
+   -f-C         ->    -c            Delete parent fork node together
+     `c              
+
+   -m-C         ->    -s-c          Change the parent combined node to simple
+     `c
+
+   -m--f-c      ->    -m-c          Separate and re-combine the parent
+     `C `c              `c
+
+
+c) Delete intermediate simple nodes
+
+del_node()
+   -S-c         ->     -c
+
+
+d) Delete combined node and change to fork node, and re-combine if needed
+
+del_mixed()
+   -M-c         ->    -f-c
+     `c                 `c
+
+   -s-M-c       ->    -m-c
+       `c               `c
+
+-----------------------------------------------------------------------------

@@ -1,0 +1,56 @@
+○ octopi のインストール手順
+
+
+1. 使用するライブラリの準備
+   ※ octopi は現在 Linux でのみ使用可能です。
+
+   - libcap と libpcap が必要なので事前に開発キットをインストールしておく
+
+    -- Ubuntu ならば
+    # apt install libcap-dev
+    # apt install libpcap-dev
+
+    -- CentOs ならば
+    # yum install libcap-devel
+    # yum install libpcap-devel
+
+
+2. インストール先のの書き変え (必要ならば)
+
+    - configure とかの仕組みはなくインストール先のパスは埋め込みなので
+      変更したい場合は Makefile を直接書き変える
+
+    $ vi src/Makefile
+
+
+3. コンパイルする
+
+    $ cd src
+    $ make
+
+
+4. インストールする
+
+    # make install
+
+
+5. コマンドの設置 (任意)
+
+    - パスの通っている場所に設定コマンドのリンクを張っておくと便利
+
+    # ln -s /opt/octopi/bin/octopi /usr/bin   
+
+
+6. OSチューニング (任意)
+
+    - ディストリビューションや、カーネルバージョンによって初期値に
+      差があるので調整しておく
+
+    # vi /etc/sysctl.conf
+	    net.unix.max_dgram_qlen=1024
+	    net.core.rmem_max=1638400
+	    net.default.rmem_max=1638400
+	    net.core.wmem_max=1638400
+	    net.default.wmem_max=1638400
+    # sysctl -p
+
